@@ -123,6 +123,7 @@ class SuggestModeAgent:
             model=settings.ollama_model,
             messages=[{"role": "system", "content": _SYSTEM_PROMPT}] + self.messages,
             tools=TOOL_SCHEMAS_OPENAI,
+            tool_choice="required",
             max_tokens=4096,
         )
 

@@ -31,7 +31,7 @@ async def ssh_execute(host: str, command: str, timeout_s: int = 30) -> dict[str,
     try:
         import asyncssh
 
-        async with asyncssh.connect(host, known_hosts=None, timeout=timeout_s) as conn:
+        async with asyncssh.connect(host, known_hosts=None, connect_timeout=timeout_s) as conn:
             result = await conn.run(command, timeout=timeout_s)
         return {
             "status": "ok",
