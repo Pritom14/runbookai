@@ -58,6 +58,18 @@ class AgentAction(Base):
     incident: Mapped["Incident"] = relationship(back_populates="actions")
 
 
+class Runbook(Base):
+    """A runbook stored in the database, matched by alert name substring."""
+
+    __tablename__ = "runbooks"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name: Mapped[str] = mapped_column(String, unique=True)
+    alert_pattern: Mapped[str] = mapped_column(String)  # substring match on alert_name
+    content: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class ApprovalRequest(Base):
     """Pending action waiting for human approval (Suggest Mode)."""
 

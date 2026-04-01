@@ -26,21 +26,27 @@ logger = logging.getLogger("runbookai.tools")
 
 
 async def ssh_execute(host: str, command: str, timeout_s: int = 30) -> dict[str, Any]:
-    """Execute a shell command on a remote host via SSH.
-
-    TODO: Implement using asyncssh. Credentials come from a secrets store.
-    """
+    """Execute a shell command on a remote host via SSH."""
     logger.info("ssh_execute: host=%s command=%s", host, command)
-    return {"status": "not_implemented", "host": host, "command": command}
+    try:
+        import asyncssh
+
+        async with asyncssh.connect(host, known_hosts=None, timeout=timeout_s) as conn:
+            result = await conn.run(command, timeout=timeout_s)
+        return {
+            "status": "ok",
+            "stdout": result.stdout[:2000],
+            "stderr": result.stderr[:500],
+            "exit_code": result.exit_status,
+        }
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
 
 
 async def check_logs(host: str, service: str, lines: int = 100) -> dict[str, Any]:
-    """Tail the last N lines of a service log on a remote host.
-
-    TODO: SSH in, run `journalctl -u {service} -n {lines}` or equivalent.
-    """
+    """Tail the last N lines of a service log on a remote host via journalctl."""
     logger.info("check_logs: host=%s service=%s lines=%d", host, service, lines)
-    return {"status": "not_implemented", "host": host, "service": service}
+    return await ssh_execute(host, f"journalctl -u {service} -n {lines} --no-pager")
 
 
 async def restart_service(host: str, service: str) -> dict[str, Any]:

@@ -9,6 +9,11 @@ class Settings(BaseSettings):
     pagerduty_webhook_secret: str = ""
     database_url: str = "sqlite+aiosqlite:///./runbookai.db"
     suggest_mode: bool = True  # False = autonomous execution
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    escalation_email: str = ""  # where to send escalation alerts
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

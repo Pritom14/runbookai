@@ -1,8 +1,10 @@
 """Incident endpoints — list, detail, and AgentTrace replay."""
 
 import logging
+import pathlib
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import HTMLResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -53,6 +55,12 @@ async def get_incident(incident_id: str, session: AsyncSession = Depends(get_ses
         "created_at": incident.created_at,
         "resolved_at": incident.resolved_at,
     }
+
+
+@router.get("/{incident_id}/replay/ui", response_class=HTMLResponse)
+async def replay_ui(incident_id: str):
+    html = (pathlib.Path(__file__).parent.parent / "static" / "replay.html").read_text()
+    return HTMLResponse(html.replace("__INCIDENT_ID__", incident_id))
 
 
 @router.get("/{incident_id}/replay")

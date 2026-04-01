@@ -102,7 +102,7 @@ class AgentHarness:
         }
 
         # Fetch the matching runbook.
-        runbook_text = await self._load_runbook(incident.alert_name)
+        runbook_text = await self._load_runbook(incident.alert_name, session=session)
 
         # Build initial context dict passed to propose_next_action on step 0.
         context: dict[str, Any] = {
@@ -225,35 +225,74 @@ class AgentHarness:
             raise ValueError(f"Incident {self.incident_id} not found")
         return incident
 
-    async def _load_runbook(self, alert_name: str) -> str:
+    async def _load_runbook(self, alert_name: str, session: Any = None) -> str:
         """Fetch the runbook for this alert type.
 
-        Searches the repo-level `runbooks/` directory for a file whose name
-        matches the slugified alert name (e.g. "High CPU" → "high-cpu.yaml").
-        Falls back to _DEFAULT_RUNBOOK if no match is found.
+        Priority:
+        1. DB runbooks — first row whose alert_pattern is a substring of alert_name.
+        2. Repo-level `runbooks/` directory (slug-matched YAML/MD/TXT file).
+        3. _DEFAULT_RUNBOOK built-in fallback.
         """
         import pathlib
         import re
 
+        # 1. DB lookup (requires a live session).
+        if session is not None:
+            try:
+                from sqlalchemy import select as _select
+
+                from runbookai.models import Runbook
+
+                result = await session.execute(_select(Runbook))
+                for rb in result.scalars().all():
+                    if rb.alert_pattern and rb.alert_pattern.lower() in alert_name.lower():
+                        logger.info("runbook loaded from DB: id=%s name=%s", rb.id, rb.name)
+                        return rb.content
+            except Exception:
+                logger.exception("DB runbook lookup failed, falling through to file search")
+
+        # 2. File-system lookup.
         runbooks_dir = pathlib.Path(__file__).parent.parent.parent / "runbooks"
         slug = re.sub(r"[^a-z0-9]+", "-", alert_name.lower()).strip("-")
         for ext in (".yaml", ".md", ".txt"):
             path = runbooks_dir / f"{slug}{ext}"
             if path.exists():
-                logger.info("runbook loaded: %s", path)
+                logger.info("runbook loaded from file: %s", path)
                 return path.read_text()
+
         logger.info("runbook not found for alert_name=%s, using default", alert_name)
         return _DEFAULT_RUNBOOK
 
     async def _escalate(self, session: Any, incident: Any, reason: str) -> None:
-        """Mark incident as escalated, notify on-call human.
-
-        TODO: Call PagerDuty API to reassign / post to Slack.
-        """
+        """Mark incident as escalated and send an email notification if configured."""
         incident.status = IncidentStatus.ESCALATED
         incident.summary = reason
         await session.commit()
         logger.warning("incident=%s escalated: %s", self.incident_id, reason)
+
+        if not settings.escalation_email or not settings.smtp_host:
+            logger.warning("escalation_email or smtp_host not set — skipping email")
+            return
+
+        import email.message
+        import smtplib
+
+        msg = email.message.EmailMessage()
+        msg["Subject"] = f"[RunbookAI] Escalation: {incident.alert_name}"
+        msg["From"] = settings.smtp_user
+        msg["To"] = settings.escalation_email
+        msg.set_content(
+            f"Incident: {incident.alert_name}\nReason: {reason}\nID: {incident.id}"
+        )
+
+        try:
+            with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as s:
+                s.starttls()
+                s.login(settings.smtp_user, settings.smtp_password)
+                s.send_message(msg)
+            logger.info("escalation email sent to %s", settings.escalation_email)
+        except Exception:
+            logger.exception("failed to send escalation email")
 
 
 # ---------------------------------------------------------------------------

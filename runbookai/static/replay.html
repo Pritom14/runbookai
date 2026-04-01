@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RunbookAI — Incident Replay</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+      padding: 0 0 60px;
+    }
+
+    /* ── Header ── */
+    #header {
+      background: #1a1d27;
+      border-bottom: 1px solid #2d3148;
+      padding: 20px 32px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    #incident-name {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #f8fafc;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .badge-resolved  { background: #064e3b; color: #34d399; border: 1px solid #065f46; }
+    .badge-escalated { background: #450a0a; color: #f87171; border: 1px solid #7f1d1d; }
+    .badge-waiting   { background: #451a03; color: #fbbf24; border: 1px solid #78350f; }
+    .badge-default   { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
+
+    #created-at {
+      font-size: 0.8rem;
+      color: #64748b;
+      white-space: nowrap;
+    }
+
+    /* ── Timeline container ── */
+    #timeline-wrap {
+      max-width: 860px;
+      margin: 32px auto 0;
+      padding: 0 24px;
+      position: relative;
+    }
+
+    /* vertical rail */
+    #timeline-wrap::before {
+      content: "";
+      position: absolute;
+      left: 52px;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: #2d3148;
+    }
+
+    /* ── Step card ── */
+    .step {
+      display: grid;
+      grid-template-columns: 64px 1fr;
+      gap: 0 16px;
+      margin-bottom: 20px;
+      position: relative;
+    }
+
+    .step-time {
+      font-size: 0.7rem;
+      color: #64748b;
+      text-align: right;
+      padding-top: 14px;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .step-dot {
+      position: absolute;
+      left: 55px;
+      top: 16px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #3b82f6;
+      border: 2px solid #0f1117;
+      transform: translateX(-50%);
+    }
+    .step-dot.ok       { background: #10b981; }
+    .step-dot.error    { background: #ef4444; }
+    .step-dot.warning  { background: #f59e0b; }
+
+    .step-card {
+      background: #1a1d27;
+      border: 1px solid #2d3148;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .step-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      background: #1e2130;
+    }
+    .step-tool {
+      font-weight: 700;
+      font-size: 0.9rem;
+      color: #e2e8f0;
+      flex: 1;
+    }
+    .step-duration {
+      font-size: 0.72rem;
+      background: #0f172a;
+      color: #94a3b8;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      padding: 2px 7px;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    .expand-btn {
+      background: none;
+      border: 1px solid #334155;
+      color: #64748b;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.72rem;
+      padding: 2px 8px;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .expand-btn:hover { color: #e2e8f0; border-color: #4b5563; }
+
+    /* input block */
+    .step-input {
+      display: none;
+      padding: 10px 14px;
+      border-top: 1px solid #2d3148;
+    }
+    .step-input.open { display: block; }
+    .step-input pre {
+      font-size: 0.78rem;
+      color: #94a3b8;
+      white-space: pre-wrap;
+      word-break: break-all;
+      font-family: "SF Mono", "Fira Code", Menlo, monospace;
+    }
+
+    /* output block */
+    .step-output {
+      padding: 10px 14px;
+      border-top: 1px solid #2d3148;
+      font-size: 0.82rem;
+      font-family: "SF Mono", "Fira Code", Menlo, monospace;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .step-output.ok    { color: #34d399; }
+    .step-output.error { color: #f87171; }
+    .step-output.muted { color: #64748b; }
+
+    /* ── Footer / summary ── */
+    #footer {
+      max-width: 860px;
+      margin: 12px auto 0;
+      padding: 0 24px;
+    }
+    #summary-box {
+      background: #064e3b;
+      border: 1px solid #065f46;
+      border-radius: 8px;
+      padding: 14px 18px;
+      font-size: 0.87rem;
+      color: #6ee7b7;
+      display: none;
+    }
+    #summary-box.visible { display: block; }
+
+    /* ── Loading / error states ── */
+    #loading, #error-box {
+      max-width: 860px;
+      margin: 60px auto 0;
+      padding: 0 24px;
+      text-align: center;
+      color: #64748b;
+    }
+    #error-box { color: #f87171; }
+  </style>
+</head>
+<body>
+
+<div id="header">
+  <span id="incident-name">Loading…</span>
+  <span id="status-badge" class="badge badge-default">—</span>
+  <span id="created-at"></span>
+</div>
+
+<div id="loading">Loading replay…</div>
+<div id="error-box" style="display:none"></div>
+
+<div id="timeline-wrap"></div>
+
+<div id="footer">
+  <div id="summary-box"></div>
+</div>
+
+<script>
+const INCIDENT_ID = "__INCIDENT_ID__";
+
+function fmtTime(t_seconds) {
+  if (t_seconds < 60) return `T+${t_seconds}s`;
+  const m = Math.floor(t_seconds / 60);
+  const s = t_seconds % 60;
+  return `T+${m}m${s > 0 ? s + "s" : ""}`;
+}
+
+function fmtDuration(ms) {
+  if (ms == null) return null;
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+function fmtDate(iso) {
+  if (!iso) return "";
+  try {
+    return new Date(iso).toLocaleString(undefined, {
+      year: "numeric", month: "short", day: "numeric",
+      hour: "2-digit", minute: "2-digit", second: "2-digit"
+    });
+  } catch { return iso; }
+}
+
+function outputClass(output) {
+  if (!output) return "muted";
+  const s = (output.status || "").toLowerCase();
+  if (s === "ok" || s === "healthy") return "ok";
+  if (s === "error") return "error";
+  const str = JSON.stringify(output).toLowerCase();
+  if (str.includes("error") || str.includes("fail")) return "error";
+  if (str.includes("ok") || str.includes("healthy") || str.includes("true")) return "ok";
+  return "muted";
+}
+
+function dotClass(output) {
+  const c = outputClass(output);
+  if (c === "ok") return "ok";
+  if (c === "error") return "error";
+  return "";
+}
+
+function badgeClass(status) {
+  if (!status) return "badge-default";
+  const s = status.toLowerCase();
+  if (s === "resolved") return "badge-resolved";
+  if (s === "escalated") return "badge-escalated";
+  if (s.includes("wait") || s.includes("pending")) return "badge-waiting";
+  return "badge-default";
+}
+
+function renderStep(step, idx) {
+  const dur = fmtDuration(step.duration_ms);
+  const outClass = outputClass(step.output);
+  const dot = dotClass(step.output);
+  const inputJson = JSON.stringify(step.input || {}, null, 2);
+  const outputText = step.output != null
+    ? JSON.stringify(step.output, null, 2)
+    : "(no output)";
+
+  const el = document.createElement("div");
+  el.className = "step";
+  el.innerHTML = `
+    <div class="step-time">${fmtTime(step.t_seconds)}</div>
+    <div class="step-dot ${dot}"></div>
+    <div class="step-card">
+      <div class="step-header">
+        <span class="step-tool">${escHtml(step.tool)}</span>
+        ${dur ? `<span class="step-duration">${dur}</span>` : ""}
+        <button class="expand-btn" data-idx="${idx}">params ▾</button>
+      </div>
+      <div class="step-input" id="input-${idx}">
+        <pre>${escHtml(inputJson)}</pre>
+      </div>
+      <div class="step-output ${outClass}">${escHtml(outputText)}</div>
+    </div>
+  `;
+
+  el.querySelector(".expand-btn").addEventListener("click", function() {
+    const block = document.getElementById(`input-${idx}`);
+    const open = block.classList.toggle("open");
+    this.textContent = open ? "params ▴" : "params ▾";
+  });
+
+  return el;
+}
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+async function load() {
+  const loadEl  = document.getElementById("loading");
+  const errorEl = document.getElementById("error-box");
+  const wrap    = document.getElementById("timeline-wrap");
+
+  try {
+    const res = await fetch(`/incidents/${INCIDENT_ID}/replay`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    const data = await res.json();
+
+    loadEl.style.display = "none";
+
+    // Header
+    document.title = `RunbookAI — ${data.alert_name || INCIDENT_ID}`;
+    document.getElementById("incident-name").textContent = data.alert_name || INCIDENT_ID;
+    const badge = document.getElementById("status-badge");
+    badge.textContent = (data.status || "unknown").replace(/_/g, " ");
+    badge.className = `badge ${badgeClass(data.status)}`;
+    document.getElementById("created-at").textContent = fmtDate(data.created_at);
+
+    // Timeline
+    if (!data.timeline || data.timeline.length === 0) {
+      wrap.innerHTML = '<p style="color:#64748b;text-align:center;padding:40px 0">No actions recorded yet.</p>';
+    } else {
+      data.timeline.forEach((step, idx) => {
+        wrap.appendChild(renderStep(step, idx));
+      });
+    }
+
+    // Footer summary
+    if (data.status === "resolved" && data.summary) {
+      const box = document.getElementById("summary-box");
+      box.textContent = data.summary;
+      box.classList.add("visible");
+    }
+
+  } catch (err) {
+    loadEl.style.display = "none";
+    errorEl.style.display = "block";
+    errorEl.textContent = `Failed to load replay: ${err.message}`;
+  }
+}
+
+load();
+</script>
+</body>
+</html>
