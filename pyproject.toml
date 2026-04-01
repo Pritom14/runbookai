@@ -1,0 +1,49 @@
+[project]
+name = "runbookai"
+version = "0.1.0"
+description = "Autonomous incident response agent — acts first, escalates only when needed"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "sqlalchemy[asyncio]>=2.0.0",
+    "aiosqlite>=0.20.0",
+    "httpx>=0.27.0",
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.6.0",
+    "anthropic>=0.40.0",
+    "token0>=0.3.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "ruff>=0.8.0",
+    "mypy>=1.13.0",
+    "httpx>=0.27.0",
+]
+
+[project.scripts]
+runbookai = "runbookai.main:start"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["runbookai"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
