@@ -1,0 +1,6 @@
+name: High CPU
+steps:
+  - Check which process is consuming CPU (check_logs or ssh_execute with `top -bn1`)
+  - If a known service, restart it
+  - Verify CPU returns to normal
+  - Call finish() with summary

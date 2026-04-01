@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from runbookai.api.approvals import router as approvals_router
 from runbookai.api.incidents import router as incidents_router
 from runbookai.api.webhooks import router as webhooks_router
+from runbookai.database import init_db
 
 app = FastAPI(
     title="RunbookAI",
@@ -15,6 +16,11 @@ app = FastAPI(
 app.include_router(webhooks_router)
 app.include_router(approvals_router)
 app.include_router(incidents_router)
+
+
+@app.on_event("startup")
+async def startup_event() -> None:
+    await init_db()
 
 
 @app.get("/health")

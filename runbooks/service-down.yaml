@@ -1,0 +1,7 @@
+name: Service Down / HTTP Health Check Failing
+steps:
+  - Perform HTTP health check on the service endpoint
+  - If failing, check service logs for crash reason
+  - Restart the service
+  - Perform HTTP health check again to verify recovery
+  - Call finish() with summary

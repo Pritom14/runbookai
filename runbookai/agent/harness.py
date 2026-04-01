@@ -228,18 +228,22 @@ class AgentHarness:
     async def _load_runbook(self, alert_name: str) -> str:
         """Fetch the runbook for this alert type.
 
-        TODO: Query local DB first; fall back to GitHub repo fetch.
-        Returns runbook text (markdown).
+        Searches the repo-level `runbooks/` directory for a file whose name
+        matches the slugified alert name (e.g. "High CPU" → "high-cpu.yaml").
+        Falls back to _DEFAULT_RUNBOOK if no match is found.
         """
-        logger.info("runbook lookup: alert_name=%s (stub)", alert_name)
-        return (
-            f"# Runbook: {alert_name}\n\n"
-            "TODO: fetch from DB or GitHub.\n"
-            "1. Check service logs.\n"
-            "2. Verify health endpoint.\n"
-            "3. Restart service if logs show OOM or crash loop.\n"
-            "4. Scale up if load-related.\n"
-        )
+        import pathlib
+        import re
+
+        runbooks_dir = pathlib.Path(__file__).parent.parent.parent / "runbooks"
+        slug = re.sub(r"[^a-z0-9]+", "-", alert_name.lower()).strip("-")
+        for ext in (".yaml", ".md", ".txt"):
+            path = runbooks_dir / f"{slug}{ext}"
+            if path.exists():
+                logger.info("runbook loaded: %s", path)
+                return path.read_text()
+        logger.info("runbook not found for alert_name=%s, using default", alert_name)
+        return _DEFAULT_RUNBOOK
 
     async def _escalate(self, session: Any, incident: Any, reason: str) -> None:
         """Mark incident as escalated, notify on-call human.
@@ -250,3 +254,16 @@ class AgentHarness:
         incident.summary = reason
         await session.commit()
         logger.warning("incident=%s escalated: %s", self.incident_id, reason)
+
+
+# ---------------------------------------------------------------------------
+# Module-level constants
+# ---------------------------------------------------------------------------
+
+_DEFAULT_RUNBOOK = """\
+1. Check service logs for errors.
+2. Perform an HTTP health check on affected endpoints.
+3. If unhealthy, restart the service.
+4. Verify recovery with another health check.
+5. Call finish() with a summary.
+"""

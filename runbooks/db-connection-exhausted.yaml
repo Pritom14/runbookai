@@ -1,0 +1,7 @@
+name: DB Connection Pool Exhausted
+steps:
+  - Check application logs for connection errors
+  - Check current connection count (ssh_execute: `psql -c "SELECT count(*) FROM pg_stat_activity"`)
+  - Restart the application service to release stale connections
+  - Verify connection count drops
+  - Call finish() with summary
