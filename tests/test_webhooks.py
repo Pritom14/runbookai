@@ -197,7 +197,7 @@ async def test_approve_action_returns_200_and_approved_status():
     )
 
     with patch(
-        "runbookai.api.approvals.AgentHarness.resume_incident",
+        "runbookai.agent.harness.AgentHarness.resume_incident",
         new_callable=AsyncMock,
         return_value=mock_result,
     ):
