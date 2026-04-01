@@ -12,7 +12,10 @@ High-risk tools are flagged and always require human approval in Suggest Mode.
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
+
+import httpx
 
 logger = logging.getLogger("runbookai.tools")
 
@@ -51,12 +54,24 @@ async def restart_service(host: str, service: str) -> dict[str, Any]:
 
 
 async def http_check(url: str, expected_status: int = 200) -> dict[str, Any]:
-    """Perform an HTTP health check against a URL.
-
-    TODO: Use httpx, return status_code, latency_ms, body snippet.
-    """
-    logger.info("http_check: url=%s", url)
-    return {"status": "not_implemented", "url": url}
+    """Perform an HTTP health check against a URL."""
+    logger.info("http_check: url=%s expected_status=%d", url, expected_status)
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            start = time.monotonic()
+            response = await client.get(url)
+            latency_ms = int((time.monotonic() - start) * 1000)
+        healthy = response.status_code == expected_status
+        return {
+            "status": "ok",
+            "healthy": healthy,
+            "status_code": response.status_code,
+            "expected_status": expected_status,
+            "latency_ms": latency_ms,
+            "body_snippet": response.text[:200],
+        }
+    except Exception as e:
+        return {"status": "error", "error": str(e), "healthy": False}
 
 
 async def scale_service(service: str, replicas: int) -> dict[str, Any]:
@@ -204,3 +219,19 @@ TOOL_REGISTRY: dict[str, Any] = {
 HIGH_RISK_TOOLS: frozenset[str] = frozenset(
     {"restart_service", "scale_service", "ssh_execute"}
 )
+
+# ---------------------------------------------------------------------------
+# OpenAI-compatible tool schemas (for Ollama and OpenAI API usage)
+# ---------------------------------------------------------------------------
+
+TOOL_SCHEMAS_OPENAI: list[dict[str, Any]] = [
+    {
+        "type": "function",
+        "function": {
+            "name": schema["name"],
+            "description": schema["description"],
+            "parameters": schema["input_schema"],
+        },
+    }
+    for schema in TOOL_SCHEMAS
+]
