@@ -114,7 +114,7 @@ class AgentHarness:
         # Create (or retrieve existing) agent for this incident.
         agent = _ACTIVE_AGENTS.get(self.incident_id)
         if agent is None:
-            agent = SuggestModeAgent(self.incident_id, session)
+            agent = await SuggestModeAgent.create(self.incident_id, session)
             _ACTIVE_AGENTS[self.incident_id] = agent
 
         # Update incident status to in_progress.
@@ -198,9 +198,9 @@ class AgentHarness:
         """
         agent = _ACTIVE_AGENTS.get(self.incident_id)
         if agent is None:
-            # Agent was evicted (e.g. server restart). Reconstruct from DB.
-            # TODO: deserialize message history from DB for crash recovery.
-            agent = SuggestModeAgent(self.incident_id, session)
+            # Agent was evicted (e.g. server restart). Reconstruct from DB,
+            # restoring persisted message history for crash recovery.
+            agent = await SuggestModeAgent.create(self.incident_id, session)
             _ACTIVE_AGENTS[self.incident_id] = agent
 
         # Execute the approved action and inject result into message history.
@@ -270,29 +270,43 @@ class AgentHarness:
         await session.commit()
         logger.warning("incident=%s escalated: %s", self.incident_id, reason)
 
-        if not settings.escalation_email or not settings.smtp_host:
+        if settings.escalation_email and settings.smtp_host:
+            import email.message
+            import smtplib
+
+            msg = email.message.EmailMessage()
+            msg["Subject"] = f"[RunbookAI] Escalation: {incident.alert_name}"
+            msg["From"] = settings.smtp_user
+            msg["To"] = settings.escalation_email
+            msg.set_content(
+                f"Incident: {incident.alert_name}\nReason: {reason}\nID: {incident.id}"
+            )
+
+            try:
+                with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as s:
+                    s.starttls()
+                    s.login(settings.smtp_user, settings.smtp_password)
+                    s.send_message(msg)
+                logger.info("escalation email sent to %s", settings.escalation_email)
+            except Exception:
+                logger.exception("failed to send escalation email")
+        else:
             logger.warning("escalation_email or smtp_host not set — skipping email")
-            return
 
-        import email.message
-        import smtplib
+        if settings.slack_webhook_url:
+            import httpx
 
-        msg = email.message.EmailMessage()
-        msg["Subject"] = f"[RunbookAI] Escalation: {incident.alert_name}"
-        msg["From"] = settings.smtp_user
-        msg["To"] = settings.escalation_email
-        msg.set_content(
-            f"Incident: {incident.alert_name}\nReason: {reason}\nID: {incident.id}"
-        )
-
-        try:
-            with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as s:
-                s.starttls()
-                s.login(settings.smtp_user, settings.smtp_password)
-                s.send_message(msg)
-            logger.info("escalation email sent to %s", settings.escalation_email)
-        except Exception:
-            logger.exception("failed to send escalation email")
+            payload = {
+                "text": (
+                    f":rotating_light: *RunbookAI Escalation*\n"
+                    f"Incident: `{incident.alert_name}`\n"
+                    f"Status: {incident.status}\n"
+                    f"Summary: {reason or 'No summary available.'}"
+                )
+            }
+            async with httpx.AsyncClient() as client:
+                await client.post(settings.slack_webhook_url, json=payload, timeout=10.0)
+            logger.info("incident=%s slack escalation sent", incident.id)
 
 
 # ---------------------------------------------------------------------------

@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     smtp_user: str = ""
     smtp_password: str = ""
     escalation_email: str = ""  # where to send escalation alerts
+    slack_webhook_url: str = ""
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

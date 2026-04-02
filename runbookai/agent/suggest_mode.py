@@ -36,7 +36,7 @@ import openai
 
 from runbookai.agent.tools import HIGH_RISK_TOOLS, TOOL_REGISTRY, TOOL_SCHEMAS_OPENAI
 from runbookai.config import settings
-from runbookai.models import ApprovalRequest, ApprovalStatus
+from runbookai.models import ApprovalRequest, ApprovalStatus, Incident
 from runbookai.trace.recorder import AgentTraceRecorder
 
 logger = logging.getLogger("runbookai.suggest_mode")
@@ -96,6 +96,20 @@ class SuggestModeAgent:
             api_key="ollama",
         )
 
+    @classmethod
+    async def create(cls, incident_id: str, session: Any) -> "SuggestModeAgent":
+        """Async factory — construct agent and restore persisted messages if any."""
+        agent = cls(incident_id, session)
+        incident = await session.get(Incident, incident_id)
+        if incident and incident.messages_json:
+            agent.messages = list(incident.messages_json)
+            logger.info(
+                "incident=%s restored %d messages from DB",
+                incident_id,
+                len(agent.messages),
+            )
+        return agent
+
     # ------------------------------------------------------------------
     # Public interface
     # ------------------------------------------------------------------
@@ -137,6 +151,7 @@ class SuggestModeAgent:
             "tool_calls": message.tool_calls,
         }
         self.messages.append(assistant_msg)
+        await self._persist_messages()
 
         finish_reason = choice.finish_reason
 
@@ -278,6 +293,13 @@ class SuggestModeAgent:
     # Private helpers
     # ------------------------------------------------------------------
 
+    async def _persist_messages(self) -> None:
+        """Serialize self.messages to the Incident row for crash recovery."""
+        incident = await self.session.get(Incident, self.incident_id)
+        if incident:
+            incident.messages_json = list(self.messages)
+            await self.session.commit()
+
     async def _append_tool_result(
         self,
         tool_call_id: str,
@@ -293,6 +315,7 @@ class SuggestModeAgent:
                 "content": json.dumps(result),
             }
         )
+        await self._persist_messages()
 
 
 # ---------------------------------------------------------------------------

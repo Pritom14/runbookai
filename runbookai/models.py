@@ -35,6 +35,7 @@ class Incident(Base):
     alert_body: Mapped[dict] = mapped_column(JSON)
     status: Mapped[str] = mapped_column(String, default=IncidentStatus.PENDING)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    messages_json: Mapped[list | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
