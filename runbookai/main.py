@@ -21,7 +21,8 @@ app.include_router(webhooks_router)
 app.include_router(approvals_router)
 app.include_router(incidents_router)
 app.include_router(runbooks_router)
-app.mount("/static", StaticFiles(directory=str(pathlib.Path(__file__).parent / "static")), name="static")
+_static = str(pathlib.Path(__file__).parent / "static")
+app.mount("/static", StaticFiles(directory=_static), name="static")
 
 
 @app.on_event("startup")

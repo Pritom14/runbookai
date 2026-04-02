@@ -30,8 +30,8 @@ async def setup_db_and_override():
     async with _test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    from runbookai.main import app
     from runbookai.database import get_session
+    from runbookai.main import app
 
     app.dependency_overrides[get_session] = _override_get_session
     yield

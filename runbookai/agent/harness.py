@@ -160,7 +160,10 @@ class AgentHarness:
                 return IncidentResult(
                     incident_id=self.incident_id,
                     resolved=False,
-                    summary=f"Waiting for approval of {action.tool_name} (approval_id={approval_id}). Rationale: {action.rationale}",
+                    summary=(
+                        f"Waiting for approval of {action.tool_name} "
+                        f"(approval_id={approval_id}). Rationale: {action.rationale}"
+                    ),
                     actions_taken=actions_taken,
                 )
 

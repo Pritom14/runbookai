@@ -61,8 +61,12 @@ async def pagerduty_webhook(
     await session.refresh(incident)
 
     background_tasks.add_task(run_agent_for_incident, incident.id)
-    logger.info("PagerDuty alert received: %s incident_id=%s", normalized["alert_name"], incident.id)
-    return {"status": "accepted", "alert_name": normalized["alert_name"], "incident_id": incident.id}
+    logger.info("PagerDuty alert received: %s id=%s", normalized["alert_name"], incident.id)
+    return {
+        "status": "accepted",
+        "alert_name": normalized["alert_name"],
+        "incident_id": incident.id,
+    }
 
 
 @router.post("/generic")
