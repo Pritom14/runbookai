@@ -27,6 +27,25 @@ class AgentTraceRecorder:
         self.session = session
         self.incident_id = incident_id
 
+    async def log_event(self, event: str, detail: dict) -> None:
+        """Log a named lifecycle event (non-tool) to the AgentAction timeline.
+
+        Uses tool_name="_event" so the replay UI can distinguish these from
+        real tool calls and render them differently.
+        """
+        from runbookai.models import AgentAction
+
+        action = AgentAction(
+            incident_id=self.incident_id,
+            tool_name="_event",
+            tool_input={"event": event},
+            tool_output=detail,
+            duration_ms=0,
+        )
+        self.session.add(action)
+        await self.session.commit()
+        logger.info("trace: incident=%s event=%s", self.incident_id, event)
+
     @asynccontextmanager
     async def record(self, tool_name: str, tool_input: dict):
         """Context manager that times the tool call and writes an AgentAction row."""

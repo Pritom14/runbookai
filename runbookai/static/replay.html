@@ -107,6 +107,31 @@
     .step-dot.ok       { background: #10b981; }
     .step-dot.error    { background: #ef4444; }
     .step-dot.warning  { background: #f59e0b; }
+    .step-dot.dot-info { background: #6366f1; }
+
+    .step-event {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 7px 14px;
+      background: #12131e;
+      border-color: #1e2130;
+    }
+    .step-event .step-tool {
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: #818cf8;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      flex: none;
+    }
+    .step-event-detail {
+      font-size: 0.72rem;
+      color: #475569;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
 
     .step-card {
       background: #1a1d27;
@@ -277,6 +302,23 @@ function badgeClass(status) {
 }
 
 function renderStep(step, idx) {
+  // Lifecycle events (_event rows) render as a slim banner, not a full card.
+  if (step.tool === "_event") {
+    const eventName = (step.input && step.input.event) || "event";
+    const detail = step.output ? JSON.stringify(step.output) : "";
+    const el = document.createElement("div");
+    el.className = "step";
+    el.innerHTML = `
+      <div class="step-time">${fmtTime(step.t_seconds)}</div>
+      <div class="step-dot dot-info"></div>
+      <div class="step-card step-event">
+        <span class="step-tool">${escHtml(eventName.replace(/_/g, " "))}</span>
+        ${detail ? `<span class="step-event-detail">${escHtml(detail)}</span>` : ""}
+      </div>
+    `;
+    return el;
+  }
+
   const dur = fmtDuration(step.duration_ms);
   const outClass = outputClass(step.output);
   const dot = dotClass(step.output);

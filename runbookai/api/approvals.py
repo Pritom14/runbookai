@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from runbookai.database import get_session
 from runbookai.models import ApprovalRequest, ApprovalStatus
+from runbookai.trace.recorder import AgentTraceRecorder
 
 logger = logging.getLogger("runbookai.api.approvals")
 router = APIRouter(prefix="/approvals", tags=["approvals"])
@@ -33,6 +34,12 @@ async def approve_action(
     approval.decided_at = datetime.utcnow()
     await session.commit()
     await session.refresh(approval)
+
+    recorder = AgentTraceRecorder(session, approval.incident_id)
+    await recorder.log_event(
+        "approval_granted",
+        {"tool": approval.tool_name, "approval_id": action_id},
+    )
 
     # Re-enter the agent harness for this incident.
     from runbookai.agent.harness import AgentHarness
@@ -82,6 +89,12 @@ async def reject_action(
     approval.decided_at = datetime.utcnow()
     await session.commit()
     await session.refresh(approval)
+
+    recorder = AgentTraceRecorder(session, approval.incident_id)
+    await recorder.log_event(
+        "approval_rejected",
+        {"tool": approval.tool_name, "approval_id": action_id, "reason": reason},
+    )
 
     logger.info(
         "action rejected: action_id=%s incident=%s reason=%s",

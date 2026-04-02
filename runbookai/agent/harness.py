@@ -37,6 +37,7 @@ from typing import Any
 from runbookai.agent.suggest_mode import RESOLVED, SuggestModeAgent
 from runbookai.config import settings
 from runbookai.models import IncidentStatus
+from runbookai.trace.recorder import AgentTraceRecorder
 
 logger = logging.getLogger("runbookai.harness")
 
@@ -101,8 +102,14 @@ class AgentHarness:
             "details": str(incident.alert_body),
         }
 
+        recorder = AgentTraceRecorder(session, self.incident_id)
+
         # Fetch the matching runbook.
         runbook_text = await self._load_runbook(incident.alert_name, session=session)
+        await recorder.log_event(
+            "runbook_matched",
+            {"alert_name": incident.alert_name, "runbook_preview": runbook_text[:200]},
+        )
 
         # Build initial context dict passed to propose_next_action on step 0.
         context: dict[str, Any] = {
@@ -136,6 +143,7 @@ class AgentHarness:
                 incident.resolved_at = datetime.utcnow()
                 incident.summary = resolution_summary
                 await session.commit()
+                await recorder.log_event("resolved", {"step": step + 1})
                 _ACTIVE_AGENTS.pop(self.incident_id, None)
                 logger.info("incident=%s resolved at step %d", self.incident_id, step + 1)
                 return IncidentResult(
@@ -151,6 +159,14 @@ class AgentHarness:
                 approval_id = await agent.create_approval_request(action)
                 incident.status = IncidentStatus.WAITING_APPROVAL
                 await session.commit()
+                await recorder.log_event(
+                    "approval_requested",
+                    {
+                        "tool": action.tool_name,
+                        "approval_id": approval_id,
+                        "rationale": action.rationale,
+                    },
+                )
                 logger.info(
                     "incident=%s paused for approval=%s tool=%s",
                     self.incident_id,
@@ -182,7 +198,7 @@ class AgentHarness:
 
         # MAX_STEPS exhausted without resolution.
         escalation_reason = f"Reached MAX_STEPS ({self.MAX_STEPS}) without resolving incident."
-        await self._escalate(session, incident, escalation_reason)
+        await self._escalate(session, incident, escalation_reason, recorder)
         _ACTIVE_AGENTS.pop(self.incident_id, None)
         return IncidentResult(
             incident_id=self.incident_id,
@@ -266,11 +282,15 @@ class AgentHarness:
         logger.info("runbook not found for alert_name=%s, using default", alert_name)
         return _DEFAULT_RUNBOOK
 
-    async def _escalate(self, session: Any, incident: Any, reason: str) -> None:
+    async def _escalate(
+        self, session: Any, incident: Any, reason: str, recorder: AgentTraceRecorder | None = None
+    ) -> None:
         """Mark incident as escalated and send an email notification if configured."""
         incident.status = IncidentStatus.ESCALATED
         incident.summary = reason
         await session.commit()
+        if recorder:
+            await recorder.log_event("escalated", {"reason": reason})
         logger.warning("incident=%s escalated: %s", self.incident_id, reason)
 
         if settings.escalation_email and settings.smtp_host:
