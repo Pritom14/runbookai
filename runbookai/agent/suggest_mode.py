@@ -149,10 +149,22 @@ class SuggestModeAgent:
         message = choice.message
 
         # Persist assistant turn — must appear before any tool result.
+        # Serialize tool_calls to plain dicts; the OpenAI SDK objects are not
+        # JSON-serializable and cannot be stored in the DB as-is.
+        tool_calls_json = None
+        if message.tool_calls:
+            tool_calls_json = [
+                {
+                    "id": tc.id,
+                    "type": tc.type,
+                    "function": {"name": tc.function.name, "arguments": tc.function.arguments},
+                }
+                for tc in message.tool_calls
+            ]
         assistant_msg: dict[str, Any] = {
             "role": "assistant",
             "content": message.content,
-            "tool_calls": message.tool_calls,
+            "tool_calls": tool_calls_json,
         }
         self.messages.append(assistant_msg)
         await self._persist_messages()
