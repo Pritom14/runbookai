@@ -42,6 +42,11 @@ class Incident(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
+    # Regression detection — set when this incident fires shortly after a
+    # prior remediation (e.g. restart) on the same service.
+    possible_regression: Mapped[bool] = mapped_column(default=False)
+    prior_incident_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+
     actions: Mapped[list["AgentAction"]] = relationship(back_populates="incident")
     approvals: Mapped[list["ApprovalRequest"]] = relationship(back_populates="incident")
 

@@ -95,6 +95,9 @@ class SuggestModeAgent:
         self.recorder = AgentTraceRecorder(session, incident_id)
         # Full conversation history; grows each turn (claw-code pattern).
         self.messages: list[dict[str, Any]] = []
+        # Set to True when this incident is a regression of a prior one.
+        # Used in demo mode to return more alarming canned responses.
+        self._is_regression: bool = False
         self._client = openai.AsyncOpenAI(
             base_url=settings.ollama_base_url,
             api_key="ollama",
@@ -105,13 +108,15 @@ class SuggestModeAgent:
         """Async factory — construct agent and restore persisted messages if any."""
         agent = cls(incident_id, session)
         incident = await session.get(Incident, incident_id)
-        if incident and incident.messages_json:
-            agent.messages = list(incident.messages_json)
-            logger.info(
-                "incident=%s restored %d messages from DB",
-                incident_id,
-                len(agent.messages),
-            )
+        if incident:
+            if incident.messages_json:
+                agent.messages = list(incident.messages_json)
+                logger.info(
+                    "incident=%s restored %d messages from DB",
+                    incident_id,
+                    len(agent.messages),
+                )
+            agent._is_regression = bool(incident.possible_regression)
         return agent
 
     # ------------------------------------------------------------------
@@ -227,7 +232,9 @@ class SuggestModeAgent:
             if settings.demo_mode:
                 from runbookai.agent.demo import get_demo_response
 
-                result_raw = get_demo_response(action.tool_name, action.tool_input)
+                result_raw = get_demo_response(
+                    action.tool_name, action.tool_input, is_regression=self._is_regression
+                )
                 async with self.recorder.record(action.tool_name, action.tool_input) as capture:
                     result = result_raw
                     capture(result)
@@ -371,7 +378,23 @@ def _build_initial_message(context: dict[str, Any]) -> str:
     if previous:
         lines += ["", "## Previous Actions (already taken this session)"]
         for a in previous:
-            lines.append(f"- {a.get('tool_name')}: {a.get('tool_input')} → {a.get('tool_output')}")
+            lines.append(
+                f"- {a.get('tool_name')}: {a.get('tool_input')} → {a.get('tool_output')}"
+            )
+
+    regression = context.get("regression")
+    if regression:
+        lines += [
+            "",
+            "## ⚠ POSSIBLE REGRESSION DETECTED",
+            f"This service was remediated {regression.get('minutes_ago', '?')} minutes ago "
+            f"(incident {regression.get('prior_incident_id', '?')}).",
+            f"Prior resolution: {regression.get('prior_summary', 'unknown')}",
+            "",
+            "IMPORTANT: The prior restart may have only masked the root cause.",
+            "Do NOT restart again without first diagnosing why the fix did not hold.",
+            "Focus on finding the underlying root cause, not the symptom.",
+        ]
 
     lines += [
         "",

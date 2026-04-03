@@ -5,6 +5,7 @@ import pathlib
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from runbookai.api.analysis import router as analysis_router
 from runbookai.api.approvals import router as approvals_router
 from runbookai.api.hosts import router as hosts_router
 from runbookai.api.incidents import router as incidents_router
@@ -20,6 +21,9 @@ app = FastAPI(
 
 app.include_router(webhooks_router)
 app.include_router(approvals_router)
+# analysis must be registered before incidents so /incidents/analysis
+# is not captured by the /incidents/{incident_id} wildcard route.
+app.include_router(analysis_router)
 app.include_router(incidents_router)
 app.include_router(runbooks_router)
 app.include_router(hosts_router)

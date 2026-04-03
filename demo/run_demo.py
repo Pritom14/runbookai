@@ -108,12 +108,24 @@ ALERTS: dict[str, dict] = {
         "details": "/var/log at 94% capacity. Write errors imminent.",
         "host": "ssh-target",
     },
+    # regression fires checkout TWICE — second alert is auto-detected as regression
+    "regression": {
+        "alert_name": "checkout service p99 latency high",
+        "severity": "high",
+        "service": "checkout-service",
+        "details": "p99 > 4s for 10 minutes. 12% error rate. On-call paged.",
+        "host": "ssh-target",
+    },
 }
 
 SCENARIO_LABELS = {
-    "checkout": "checkout-latency  —  DB connection leak → escalate with root cause",
-    "payment":  "payment-service-503  —  OOM crash → restart → recover",
-    "disk":     "disk-full  —  /var/log 94% → clear old logs → verify",
+    "checkout":   "checkout-latency  —  DB connection leak → escalate with root cause",
+    "payment":    "payment-service-503  —  OOM crash → restart → recover",
+    "disk":       "disk-full  —  /var/log 94% → clear old logs → verify",
+    "regression": (
+        "regression demo  —  same service alerts twice"
+        " → agent detects pattern, escalates smarter"
+    ),
 }
 
 # ---------------------------------------------------------------------------
@@ -309,6 +321,199 @@ def handle_approval(base: str, incident_id: str, auto_approve: bool) -> None:
 # Main
 # ---------------------------------------------------------------------------
 
+def print_competitor_table() -> None:
+    """Print a side-by-side comparison with incumbent tools."""
+    section("RUNBOOKAI vs THE INCUMBENTS")
+
+    col = 22
+    tools = ["PagerDuty", "OpsGenie", "incident.io", "Grafana OnCall", "RunbookAI"]
+    features = [
+        ("Automated diagnosis", [False, False, False, False, True]),
+        ("Executes remediation",  [False, False, False, False, True]),
+        ("Regression detection",  [False, False, False, False, True]),
+        ("Full AgentTrace replay", [False, False, False, False, True]),
+        ("Suggest Mode (human-in-loop)", [False, False, True, False, True]),
+        ("Self-hosted / open-source",    [False, False, False, False, True]),
+        ("One-command install",           [False, False, False, False, True]),
+    ]
+
+    header = "  " + "Feature".ljust(32)
+    for t in tools:
+        header += t.ljust(col)
+    print(c(BOLD, header))
+    hr()
+
+    for feature, values in features:
+        row = "  " + feature.ljust(32)
+        for i, val in enumerate(values):
+            if i == len(tools) - 1:  # RunbookAI column
+                mark = c(GREEN, "✓  YES".ljust(col))
+            elif val:
+                mark = c(CYAN, "✓  YES".ljust(col))
+            else:
+                mark = c(DIM, "✗  No ".ljust(col))
+            row += mark
+        print(row)
+
+    print()
+    print(c(DIM, "  Incumbents page humans. RunbookAI is the human."))
+    print()
+
+
+def run_single_scenario(
+    base: str, scenario: str, auto_approve: bool, label_prefix: str = ""
+) -> tuple[str, dict]:
+    """Fire one alert, wait until done. Returns (incident_id, incident_dict)."""
+    alert = ALERTS[scenario]
+    label = label_prefix or SCENARIO_LABELS[scenario]
+    section(f"SCENARIO: {label}")
+
+    print(f"  {c(RED, '🚨 ALERT RECEIVED')}")
+    print(f"  {c(BOLD, alert['alert_name'])}")
+    print(f"  {c(DIM, alert['details'])}")
+    print()
+
+    print(c(DIM, "  → Sending to RunbookAI..."))
+    resp = post(base, "/webhooks/generic", alert)
+    if resp.get("possible_regression"):
+        prior = resp.get("prior_incident_id")
+        print(c(YELLOW, f"  ⚠  REGRESSION DETECTED — prior incident {prior}"))
+    incident_id = resp.get("incident_id")
+    if not incident_id:
+        print(c(RED, f"  ✗  Failed to create incident: {resp}"))
+        sys.exit(1)
+
+    section("AGENT WORKING")
+    t_start = time.monotonic()
+    incident = poll_until_done(base, incident_id, auto_approve)
+    elapsed = time.monotonic() - t_start
+
+    status = incident.get("status", "unknown")
+    summary = incident.get("summary", "No summary.")
+
+    section("RESULT")
+    if status == "resolved":
+        print(f"  {c(GREEN, '✓  RESOLVED')}  in {elapsed:.0f}s")
+    elif status == "escalated":
+        print(f"  {c(YELLOW, '⚡ ESCALATED')}  in {elapsed:.0f}s")
+    else:
+        print(f"  {c(DIM, status)}  in {elapsed:.0f}s")
+
+    print()
+    print(c(BOLD, "  Summary:"))
+    for line in (summary or "").split(". "):
+        if line.strip():
+            print(f"  {c(DIM, '  ' + line.strip() + '.')}")
+
+    print()
+    print(c(DIM, f"  Full replay: {base}/incidents/{incident_id}/replay/ui"))
+    print()
+
+    return incident_id, incident
+
+
+def run_regression_scenario(base: str, auto_approve: bool) -> None:
+    """Fire first incident, then fire a second identical alert after a brief pause.
+
+    The second alert fires for the same service — RunbookAI detects the pattern,
+    warns the agent in its system prompt not to just restart again, and the agent
+    escalates with a deeper root-cause analysis instead.
+    """
+    print(c(DIM, "  This scenario fires the same alert TWICE for the same service."))
+    print(c(DIM, "  Watch how RunbookAI detects the regression and changes its response."))
+    print()
+
+    # First incident — normal checkout latency
+    id_a, incident_a = run_single_scenario(
+        base, "checkout", auto_approve,
+        label_prefix="INCIDENT #1 — checkout-latency (first occurrence)",
+    )
+
+    # Give the DB a moment to commit the first incident
+    print()
+    print(c(YELLOW, "  ━━━ Simulating 30-second gap (same alert fires again) ━━━"))
+    print(c(DIM, "  RunbookAI restart cleared symptoms temporarily but latency is back..."))
+    print()
+    for i in range(5, 0, -1):
+        print(f"\r  {c(DIM, f'Firing second alert in {i}s...')} ", end="", flush=True)
+        time.sleep(1)
+    print(f"\r  {c(RED, 'Second alert firing now!')}                    ")
+    print()
+
+    # Second incident — regression
+    id_b, incident_b = run_single_scenario(
+        base, "regression", auto_approve,
+        label_prefix="INCIDENT #2 — REGRESSION DETECTED (same service, 5 min later)",
+    )
+
+    # Show cross-incident diff
+    section("CROSS-INCIDENT DIFF  (what other tools cannot show you)")
+    diff_resp = get(base, f"/incidents/compare?incident_a={id_a}&incident_b={id_b}")
+    if "error" in diff_resp:
+        print(c(DIM, f"  (diff not available: {diff_resp['error']})"))
+    else:
+        diff = diff_resp.get("diff", {})
+        ia = diff_resp.get("incident_a", {})
+        ib = diff_resp.get("incident_b", {})
+
+        print(f"  {c(BOLD, 'Incident A')}  status={ia.get('status')}  "
+              f"steps={ia.get('steps')}  MTTR={ia.get('mttr_seconds', 'n/a')}s")
+        print(f"  {c(BOLD, 'Incident B')}  status={ib.get('status')}  "
+              f"steps={ib.get('steps')}  MTTR={ib.get('mttr_seconds', 'n/a')}s  "
+              + (c(RED, "← REGRESSION") if ib.get("possible_regression") else ""))
+        print()
+
+        if diff.get("is_regression"):
+            print(c(RED, "  ⚠  RunbookAI flagged this as a CONFIRMED REGRESSION"))
+
+        gap = diff.get("gap_minutes")
+        if gap is not None:
+            print(c(DIM, f"  Gap between incidents: {gap} minutes"))
+
+        outcome = diff.get("outcome_changed")
+        if outcome:
+            print(c(YELLOW, "  Outcome changed between incidents"))
+
+        added = diff.get("tools_added_in_b", [])
+        dropped = diff.get("tools_dropped_in_b", [])
+        if added:
+            print(c(CYAN, f"  Tools added in B: {', '.join(added)}"))
+        if dropped:
+            print(c(DIM, f"  Tools dropped in B: {', '.join(dropped)}"))
+
+        metric_changes = diff.get("metric_changes", {})
+        if metric_changes:
+            print()
+            print(c(BOLD, "  Metric changes:"))
+            for metric, change in metric_changes.items():
+                a_val = change.get("a", "n/a")
+                b_val = change.get("b", "n/a")
+                print(f"    {c(DIM, metric.ljust(25))}  A={a_val}  →  B={b_val}")
+
+    print()
+    analysis = get(base, "/incidents/analysis?hours=1")
+    regressions = analysis.get("regressions_detected", 0)
+    if regressions:
+        print(c(RED, f"  📊 Pattern analysis: {regressions} regression(s) in the last hour"))
+    auto_rate = analysis.get("auto_resolution_rate_pct", 0)
+    total = analysis.get("total_incidents", 0)
+    print(c(DIM, f"  📊 {total} incidents processed  |  {auto_rate}% auto-resolution rate"))
+    print()
+
+
+def print_header() -> None:
+    print()
+    print(c(BOLD, "  ██████╗ ██╗   ██╗███╗   ██╗██████╗  ██████╗  ██████╗ ██╗  ██╗ █████╗ ██╗"))
+    print(c(BOLD, "  ██╔══██╗██║   ██║████╗  ██║██╔══██╗██╔═══██╗██╔═══██╗██║ ██╔╝██╔══██╗██║"))
+    print(c(BOLD, "  ██████╔╝██║   ██║██╔██╗ ██║██████╔╝██║   ██║██║   ██║█████╔╝ ███████║██║"))
+    print(c(BOLD, "  ██╔══██╗██║   ██║██║╚██╗██║██╔══██╗██║   ██║██║   ██║██╔═██╗ ██╔══██║██║"))
+    print(c(BOLD, "  ██║  ██║╚██████╔╝██║ ╚████║██████╔╝╚██████╔╝╚██████╔╝██║  ██╗██║  ██║██║"))
+    print(c(BOLD, "  ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═══╝╚═════╝  ╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝"))
+    print()
+    print(c(DIM, "  Autonomous incident response. Gets paged. Reads the runbook. Acts."))
+    print()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="RunbookAI automated demo")
     parser.add_argument(
@@ -334,61 +539,22 @@ def main() -> None:
         print(c(DIM,  "     Start it with: DEMO_MODE=true uvicorn runbookai.main:app --port 7000"))
         sys.exit(1)
 
-    # Header
-    print()
-    print(c(BOLD, "  ██████╗ ██╗   ██╗███╗   ██╗██████╗  ██████╗  ██████╗ ██╗  ██╗ █████╗ ██╗"))
-    print(c(BOLD, "  ██╔══██╗██║   ██║████╗  ██║██╔══██╗██╔═══██╗██╔═══██╗██║ ██╔╝██╔══██╗██║"))
-    print(c(BOLD, "  ██████╔╝██║   ██║██╔██╗ ██║██████╔╝██║   ██║██║   ██║█████╔╝ ███████║██║"))
-    print(c(BOLD, "  ██╔══██╗██║   ██║██║╚██╗██║██╔══██╗██║   ██║██║   ██║██╔═██╗ ██╔══██║██║"))
-    print(c(BOLD, "  ██║  ██║╚██████╔╝██║ ╚████║██████╔╝╚██████╔╝╚██████╔╝██║  ██╗██║  ██║██║"))
-    print(c(BOLD, "  ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═══╝╚═════╝  ╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝"))
-    print()
-    print(c(DIM, "  Autonomous incident response. Gets paged. Reads the runbook. Acts."))
-    print()
+    print_header()
 
-    section(f"SCENARIO: {SCENARIO_LABELS[scenario]}")
+    if scenario == "regression":
+        run_regression_scenario(base, auto_approve)
+        print_competitor_table()
+        hr()
+        print()
+        return
 
-    alert = ALERTS[scenario]
-    print(f"  {c(RED, '🚨 ALERT RECEIVED')}")
-    print(f"  {c(BOLD, alert['alert_name'])}")
-    print(f"  {c(DIM, alert['details'])}")
-    print()
-
-    # Fire the alert
-    print(c(DIM, "  → Sending to RunbookAI..."))
-    resp = post(base, "/webhooks/generic", alert)
-    incident_id = resp.get("incident_id")
-    if not incident_id:
-        print(c(RED, f"  ✗  Failed to create incident: {resp}"))
-        sys.exit(1)
-
-    section("AGENT WORKING")
-
-    t_start = time.monotonic()
-    incident = poll_until_done(base, incident_id, auto_approve)
-    elapsed = time.monotonic() - t_start
-
-    # Final result
+    incident_id, incident = run_single_scenario(base, scenario, auto_approve)
     status = incident.get("status", "unknown")
-    summary = incident.get("summary", "No summary.")
 
-    section("RESULT")
     if status == "resolved":
-        print(f"  {c(GREEN, '✓  RESOLVED')}  in {elapsed:.0f}s")
-    elif status == "escalated":
-        print(f"  {c(YELLOW, '⚡ ESCALATED')}  in {elapsed:.0f}s")
-    else:
-        print(f"  {c(DIM, status)}  in {elapsed:.0f}s")
-
+        print(c(DIM, f"  Full replay: {base}/incidents/{incident_id}/replay/ui"))
     print()
-    print(c(BOLD, "  Summary:"))
-    for line in (summary or "").split(". "):
-        if line.strip():
-            print(f"  {c(DIM, '  ' + line.strip() + '.')}")
-
-    print()
-    print(c(DIM, f"  Full replay: {base}/incidents/{incident_id}/replay/ui"))
-    print()
+    print_competitor_table()
     hr()
     print()
 

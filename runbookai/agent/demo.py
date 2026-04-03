@@ -125,6 +125,69 @@ _DEMO_RESPONSES: dict[str, dict[str, Any]] = {
     },
 }
 
+# Regression scenario: second incident for same service.
+# db still has issues (restart didn't fix it)
+_REGRESSION_DEMO_RESPONSES: dict[str, dict[str, Any]] = {
+    "check_logs": {
+        "status": "ok",
+        "stdout": (
+            "Apr 03 12:01:14 checkout-service[3102]: INFO  Service restarted (PID 3102)\n"
+            "Apr 03 12:01:18 checkout-service[3102]: WARN  Pool: 88/100 in use\n"
+            "Apr 03 12:01:22 checkout-service[3102]: ERROR Timeout acquiring "
+            "connection from pool (waited 3001ms) -- pool exhausted\n"
+            "Apr 03 12:01:22 checkout-service[3102]: ERROR Request failed: "
+            "connection pool exhausted\n"
+            "Apr 03 12:01:29 checkout-service[3102]: WARN  Pool: 97/100 in use\n"
+            "Apr 03 12:01:34 checkout-service[3102]: ERROR Slow query: "
+            "BEGIN; UPDATE orders SET status=? ... (never COMMIT) took 12482ms\n"
+            "Apr 03 12:01:34 checkout-service[3102]: ERROR DB pool saturated again "
+            "-- 18 idle-in-transaction sessions detected\n"
+        ),
+        "stderr": "",
+        "exit_code": 0,
+    },
+    "run_db_check": {
+        "status": "ok",
+        "db_type": "postgres",
+        "raw": (
+            " total_connections | active | idle_in_tx | longest_query_s \n"
+            "-------------------+--------+------------+-----------------\n"
+            "                97 |     78 |         18 |             142 \n"
+            "(1 row)\n\n"
+            " lock_count \n"
+            "------------\n"
+            "          7 \n"
+            "(1 row)\n"
+        ),
+    },
+    "http_check": {
+        "status": "ok",
+        "healthy": True,
+        "status_code": 200,
+        "expected_status": 200,
+        "latency_ms": 3241,
+        "body_snippet": '{"status":"ok"}',
+    },
+    "query_metrics": {
+        "status": "ok",
+        "cpu_used_pct": 31.8,
+        "load_average": {"1m": "2.14", "5m": "1.89", "15m": "1.45"},
+        "memory_mb": {"total_mb": 16384, "used_mb": 9712, "free_mb": 6672},
+        "raw": (
+            "---CPU---\n"
+            "%Cpu(s): 31.8 us,  3.4 sy,  0.0 ni, 63.1 id\n"
+            "---MEM---\n"
+            "              total        used        free\n"
+            "Mem:          16384        9712        6672\n"
+            "---LOAD---\n"
+            "load average: 2.14, 1.89, 1.45\n"
+        ),
+    },
+}
+
+# Track which incident number we're on per service (regression = incident #2+)
+_INCIDENT_COUNT_BY_SERVICE: dict[str, int] = {}
+
 # http_check has two states in the demo: first call slow (problem), second call fast (after fix)
 _HTTP_CALL_COUNT: dict[str, int] = {}
 
@@ -154,8 +217,17 @@ def demo_http_check(url: str, expected_status: int = 200) -> dict[str, Any]:
     return _HTTP_SLOW if count == 0 else _HTTP_HEALTHY
 
 
-def get_demo_response(tool_name: str, kwargs: dict[str, Any]) -> dict[str, Any]:
-    """Return the canned demo response for a given tool, with kwargs patched in."""
+def get_demo_response(
+    tool_name: str, kwargs: dict[str, Any], is_regression: bool = False
+) -> dict[str, Any]:
+    """Return the canned demo response for a given tool, with kwargs patched in.
+
+    When is_regression=True, return responses that show the restart didn't fix the
+    root cause (worse DB state, higher load, still slow http).
+    """
+    if is_regression and tool_name in _REGRESSION_DEMO_RESPONSES:
+        return dict(_REGRESSION_DEMO_RESPONSES[tool_name])
+
     if tool_name == "http_check":
         return demo_http_check(kwargs.get("url", ""), kwargs.get("expected_status", 200))
 

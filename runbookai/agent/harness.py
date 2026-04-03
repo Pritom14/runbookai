@@ -118,6 +118,27 @@ class AgentHarness:
             "previous_actions": [],
         }
 
+        # Inject regression context if this incident was flagged.
+        if incident.possible_regression and incident.prior_incident_id:
+            prior = await self._load_incident_by_id(incident.prior_incident_id, session)
+            if prior:
+                minutes_ago = int(
+                    (datetime.utcnow() - prior.created_at).total_seconds() / 60
+                )
+                context["regression"] = {
+                    "prior_incident_id": prior.id,
+                    "prior_summary": prior.summary or "No summary recorded.",
+                    "minutes_ago": minutes_ago,
+                }
+                await recorder.log_event(
+                    "regression_detected",
+                    {
+                        "prior_incident_id": prior.id,
+                        "minutes_ago": minutes_ago,
+                        "prior_summary": prior.summary,
+                    },
+                )
+
         # Create (or retrieve existing) agent for this incident.
         agent = _ACTIVE_AGENTS.get(self.incident_id)
         if agent is None:
@@ -233,16 +254,17 @@ class AgentHarness:
     # ------------------------------------------------------------------
 
     async def _load_incident(self, session: Any) -> Any:
-        """Load the Incident row from DB.
-
-        TODO: Replace stub with real SQLAlchemy async get.
-        """
         from runbookai.models import Incident
 
         incident = await session.get(Incident, self.incident_id)
         if incident is None:
             raise ValueError(f"Incident {self.incident_id} not found")
         return incident
+
+    async def _load_incident_by_id(self, incident_id: str, session: Any) -> Any:
+        from runbookai.models import Incident
+
+        return await session.get(Incident, incident_id)
 
     async def _load_runbook(self, alert_name: str, session: Any = None) -> str:
         """Fetch the runbook for this alert type.
