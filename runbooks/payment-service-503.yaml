@@ -1,0 +1,43 @@
+name: payment-service-503
+alert_pattern: payment-service 503
+description: |
+  High 5xx error rate on the payment service. Usually caused by an OOM crash,
+  a frozen process, or a bad deploy. This runbook diagnoses and remediates
+  the most common causes automatically.
+
+steps:
+  1. HTTP health check
+     - Run http_check on the payment-service health endpoint.
+     - If healthy (200) but errors are still reported, proceed to step 2.
+     - If unhealthy, proceed directly to step 3.
+
+  2. Check if the process is running
+     - Run check_processes(host, "payment-service") (or the relevant process name).
+     - If the process is NOT running, jump to step 4 (restart).
+     - If running but unhealthy, proceed to step 3.
+
+  3. Check logs for root cause
+     - Run check_logs(host, "payment-service", lines=200).
+     - Look for: OutOfMemoryError, OOMKilled, segfault, connection refused,
+       port binding failure, or unhandled exceptions.
+     - Capture the root cause for the resolution summary.
+
+  4. Check system resources
+     - Run query_metrics(host) to confirm CPU and memory state.
+     - If memory is critically low, note potential OOM kill.
+
+  5. Restart the service (HIGH-RISK — requires approval)
+     - Run restart_service(host, "payment-service").
+     - This will pause for human approval in Suggest Mode.
+
+  6. Verify recovery
+     - After restart: run http_check again.
+     - Run check_processes to confirm process is alive.
+     - If healthy: call finish() with a summary of the root cause and fix.
+     - If still unhealthy after restart: escalate with full diagnosis.
+
+escalation_criteria:
+  - Service fails to come up after restart
+  - Root cause is a bad deploy (recent deployment in logs)
+  - Root cause requires a code fix or DB migration
+  - Disk full (run check_disk, then escalate to clear_disk approval)

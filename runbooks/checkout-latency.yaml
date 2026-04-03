@@ -1,0 +1,56 @@
+name: checkout-latency
+alert_pattern: checkout
+description: |
+  High p99 latency on the checkout service (>2s). Do NOT restart blindly —
+  this is almost never an application crash. The most common causes are:
+  database connection exhaustion, a slow query or lock contention, or
+  resource saturation on the host. Diagnose the root cause before acting.
+
+steps:
+  1. HTTP health check
+     - Run http_check on the checkout-service endpoint.
+     - Note: the service may return 200 but still be slow.
+       A healthy response here does NOT rule out a problem.
+
+  2. Check system resources
+     - Run query_metrics(host) — CPU, memory, load average.
+     - If CPU > 90% or load average >> number of cores: resource saturation.
+       Note this as a contributing factor.
+     - If memory is near-full: possible memory pressure causing GC pauses.
+
+  3. Check application logs
+     - Run check_logs(host, "checkout-service", lines=300).
+     - Look for: "connection pool", "timeout", "waiting for connection",
+       "lock wait", "slow query", or database-related error messages.
+     - These point to the DB layer as root cause.
+
+  4. Check database health (if step 3 suggests DB issues)
+     - Run run_db_check(host, "postgres").
+     - Examine:
+         * total_connections vs active: if active ≈ max (typically 100), pool is exhausted.
+         * idle_in_tx: if > 0, there are connection leaks (transactions not committed/rolled back).
+         * longest_query_s: if > 30s, a long-running query is blocking others.
+         * lock_count: if > 0, lock contention is stalling requests.
+
+  5. Check process state
+     - Run check_processes(host, "checkout-service").
+     - Confirm the service is running and note resource usage.
+
+  6. Diagnose and finish
+     - Compile findings from steps 1-5.
+     - If root cause is identified (e.g. connection leak, slow query, lock contention):
+       call finish() with resolved=False and a precise root cause explanation.
+       DO NOT restart — a restart will mask the leak and it will recur.
+     - If root cause is unclear: escalate with all diagnostic data.
+
+escalation_criteria:
+  - DB connection pool exhausted (idle_in_tx > 5): requires app team to fix connection leak
+  - Long-running query blocking others: requires DBA to kill query and investigate
+  - Lock contention: requires DBA review
+  - CPU saturation: requires capacity review
+  - Any finding that requires a code change or manual DB intervention
+
+important_notes:
+  - Do NOT restart the checkout service for latency issues without identifying root cause.
+  - A restart will temporarily fix connection exhaustion but the leak will recur within minutes.
+  - The goal is to hand the on-call engineer a precise root cause, not just a quick fix.
