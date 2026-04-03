@@ -211,14 +211,23 @@ class SuggestModeAgent:
         """
         result: dict[str, Any]
         try:
-            fn = TOOL_REGISTRY[action.tool_name]
-            # Inject the DB session for tools that need credential lookup.
-            extra: dict[str, Any] = {}
-            if action.tool_name in SESSION_AWARE_TOOLS:
-                extra["_session"] = self.session
-            async with self.recorder.record(action.tool_name, action.tool_input) as capture:
-                result = await fn(**action.tool_input, **extra)
-                capture(result)
+            # Demo mode: return pre-canned responses, no real SSH connections.
+            if settings.demo_mode:
+                from runbookai.agent.demo import get_demo_response
+
+                result_raw = get_demo_response(action.tool_name, action.tool_input)
+                async with self.recorder.record(action.tool_name, action.tool_input) as capture:
+                    result = result_raw
+                    capture(result)
+            else:
+                fn = TOOL_REGISTRY[action.tool_name]
+                # Inject the DB session for tools that need credential lookup.
+                extra: dict[str, Any] = {}
+                if action.tool_name in SESSION_AWARE_TOOLS:
+                    extra["_session"] = self.session
+                async with self.recorder.record(action.tool_name, action.tool_input) as capture:
+                    result = await fn(**action.tool_input, **extra)
+                    capture(result)
         except KeyError:
             result = {"status": "error", "error": f"unknown tool: {action.tool_name}"}
         except Exception as exc:  # noqa: BLE001

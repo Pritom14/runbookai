@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     # SSH defaults — used when no HostCredential row exists for a given host.
     ssh_default_username: str = ""
     ssh_private_key_path: str = ""  # path to PEM file, e.g. ~/.ssh/id_rsa
+    # Demo mode — returns pre-canned responses; no real SSH connections made.
+    demo_mode: bool = False
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

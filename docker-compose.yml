@@ -1,0 +1,60 @@
+version: "3.9"
+
+# RunbookAI demo stack
+#
+# Starts two services:
+#   runbookai  — the agent API on port 7000
+#   ssh-target — a lightweight SSH target (Alpine + sshd) for real SSH demos
+#
+# Quick start:
+#   docker compose up
+#   # In another terminal:
+#   ./demo/fire_alert.sh checkout   # complex scenario (connection leak)
+#   ./demo/fire_alert.sh payment    # mundane scenario (OOM → restart)
+#
+# For a zero-infrastructure demo (no real SSH):
+#   DEMO_MODE=true docker compose up runbookai
+#
+# Ollama must be running on the host: https://ollama.com
+#   ollama pull qwen2.5:7b
+
+services:
+  runbookai:
+    build: .
+    ports:
+      - "7000:7000"
+    environment:
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434/v1}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:7b}
+      - DATABASE_URL=sqlite+aiosqlite:///./runbookai.db
+      - SUGGEST_MODE=${SUGGEST_MODE:-true}
+      - DEMO_MODE=${DEMO_MODE:-false}
+      - SSH_DEFAULT_USERNAME=demo
+      - SSH_PRIVATE_KEY_PATH=/run/secrets/demo_key
+    volumes:
+      - ./runbooks:/app/runbooks
+      - runbookai_db:/app
+    secrets:
+      - demo_key
+    depends_on:
+      ssh-target:
+        condition: service_healthy
+
+  ssh-target:
+    build:
+      context: .
+      dockerfile: demo/Dockerfile.ssh-target
+    ports:
+      - "2222:22"
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "22"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  runbookai_db:
+
+secrets:
+  demo_key:
+    file: ./demo/ssh_keys/demo_key

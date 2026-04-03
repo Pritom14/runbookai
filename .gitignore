@@ -12,3 +12,4 @@ build/
 .ruff_cache/
 *.db
 *.sqlite
+demo/ssh_keys/

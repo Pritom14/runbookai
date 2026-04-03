@@ -24,7 +24,6 @@ from runbookai.agent.tools import (
     run_db_check,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -349,7 +348,7 @@ async def test_clear_disk_passes_through_delete_error(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_ssh_creds_from_db():
-    from runbookai.agent.credentials import SSHCredentials, get_ssh_creds
+    from runbookai.agent.credentials import get_ssh_creds
     from runbookai.models import HostCredential
 
     mock_row = HostCredential(
