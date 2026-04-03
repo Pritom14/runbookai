@@ -63,12 +63,12 @@ def section(title: str) -> None:
 # HTTP helpers (stdlib only — no requests dep)
 # ---------------------------------------------------------------------------
 
-def _request(method: str, url: str, body: dict | None = None) -> dict:
+def _request(method: str, url: str, body: dict | None = None, timeout: int = 10) -> dict:
     data = json.dumps(body).encode() if body else None
     headers = {"Content-Type": "application/json"}
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             return json.loads(resp.read())
     except urllib.error.HTTPError as e:
         return {"error": e.read().decode(), "status_code": e.code}
@@ -78,8 +78,8 @@ def get(base: str, path: str) -> dict:
     return _request("GET", f"{base}{path}")
 
 
-def post(base: str, path: str, body: dict | None = None) -> dict:
-    return _request("POST", f"{base}{path}", body)
+def post(base: str, path: str, body: dict | None = None, timeout: int = 10) -> dict:
+    return _request("POST", f"{base}{path}", body, timeout=timeout)
 
 
 # ---------------------------------------------------------------------------
@@ -249,7 +249,7 @@ def poll_until_done(base: str, incident_id: str, auto_approve: bool) -> dict:
     step_idx = 0
 
     while True:
-        time.sleep(1.5)
+        time.sleep(3)
         incident = get(base, f"/incidents/{incident_id}")
         status = incident.get("status", "unknown")
 
@@ -309,7 +309,8 @@ def handle_approval(base: str, incident_id: str, auto_approve: bool) -> None:
         time.sleep(1)
     print(f"\r  {c(GREEN, 'Approving...')}              ")
 
-    result = post(base, f"/approvals/{approval_id}/approve")
+    # LLM can take 60-120s on a local model — use a generous timeout.
+    result = post(base, f"/approvals/{approval_id}/approve", timeout=180)
     if "error" in result:
         print(c(RED, f"  Approval failed: {result['error']}"))
     else:
