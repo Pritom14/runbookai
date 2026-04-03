@@ -124,18 +124,47 @@ Or drop YAML files in `runbooks/`. Two demo runbooks are included:
 
 ## LLM
 
-Runs locally via Ollama — no API key, no cost.
+RunbookAI works with any OpenAI-compatible endpoint. Three env vars control it:
+
+```
+LLM_BASE_URL=...
+LLM_MODEL=...
+LLM_API_KEY=...
+```
+
+**Ollama (default — local, no API key, no cost):**
 
 ```bash
 ollama pull qwen2.5:7b
 ```
-
 ```
-OLLAMA_BASE_URL=http://localhost:11434/v1
-OLLAMA_MODEL=qwen2.5:7b
+LLM_BASE_URL=http://localhost:11434/v1
+LLM_MODEL=qwen2.5:7b
+LLM_API_KEY=ollama
 ```
 
-Any Ollama model with tool-calling support works. `qwen2.5:7b` is recommended.
+**OpenAI:**
+```
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_MODEL=gpt-4o
+LLM_API_KEY=sk-...
+```
+
+**Anthropic:**
+```
+LLM_BASE_URL=https://api.anthropic.com/v1
+LLM_MODEL=claude-sonnet-4-6
+LLM_API_KEY=sk-ant-...
+```
+
+**Groq (fast + cheap, excellent tool calling):**
+```
+LLM_BASE_URL=https://api.groq.com/openai/v1
+LLM_MODEL=llama-3.3-70b-versatile
+LLM_API_KEY=gsk_...
+```
+
+The model must support tool/function calling. `qwen2.5:7b` works well locally. For large, complex codebases or multi-service incidents, `gpt-4o` or `claude-sonnet-4-6` will produce more reliable reasoning.
 
 ## Database
 

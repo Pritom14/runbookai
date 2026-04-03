@@ -99,8 +99,8 @@ class SuggestModeAgent:
         # Used in demo mode to return more alarming canned responses.
         self._is_regression: bool = False
         self._client = openai.AsyncOpenAI(
-            base_url=settings.ollama_base_url,
-            api_key="ollama",
+            base_url=settings.llm_base_url,
+            api_key=settings.llm_api_key,
         )
 
     @classmethod
@@ -143,7 +143,7 @@ class SuggestModeAgent:
             )
 
         response = await self._client.chat.completions.create(
-            model=settings.ollama_model,
+            model=settings.llm_model,
             messages=[{"role": "system", "content": _SYSTEM_PROMPT}] + self.messages,
             tools=TOOL_SCHEMAS_OPENAI,
             tool_choice="required",

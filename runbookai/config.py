@@ -4,8 +4,9 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     anthropic_api_key: str = ""
     token0_base_url: str = "http://localhost:8000"
-    ollama_base_url: str = "http://localhost:11434/v1"
-    ollama_model: str = "qwen2.5:7b"
+    llm_base_url: str = "http://localhost:11434/v1"
+    llm_model: str = "qwen2.5:7b"
+    llm_api_key: str = "ollama"  # "ollama" for Ollama; real key for OpenAI/Anthropic/Groq
     pagerduty_webhook_secret: str = ""
     database_url: str = "sqlite+aiosqlite:///./runbookai.db"
     suggest_mode: bool = True  # False = autonomous execution
