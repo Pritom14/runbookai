@@ -33,7 +33,12 @@ from typing import Any
 
 import openai
 
-from runbookai.agent.tools import HIGH_RISK_TOOLS, TOOL_REGISTRY, TOOL_SCHEMAS_OPENAI
+from runbookai.agent.tools import (
+    HIGH_RISK_TOOLS,
+    SESSION_AWARE_TOOLS,
+    TOOL_REGISTRY,
+    TOOL_SCHEMAS_OPENAI,
+)
 from runbookai.config import settings
 from runbookai.models import ApprovalRequest, ApprovalStatus, Incident
 from runbookai.trace.recorder import AgentTraceRecorder
@@ -207,8 +212,12 @@ class SuggestModeAgent:
         result: dict[str, Any]
         try:
             fn = TOOL_REGISTRY[action.tool_name]
+            # Inject the DB session for tools that need credential lookup.
+            extra: dict[str, Any] = {}
+            if action.tool_name in SESSION_AWARE_TOOLS:
+                extra["_session"] = self.session
             async with self.recorder.record(action.tool_name, action.tool_input) as capture:
-                result = await fn(**action.tool_input)
+                result = await fn(**action.tool_input, **extra)
                 capture(result)
         except KeyError:
             result = {"status": "error", "error": f"unknown tool: {action.tool_name}"}

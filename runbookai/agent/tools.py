@@ -25,13 +25,34 @@ logger = logging.getLogger("runbookai.tools")
 # ---------------------------------------------------------------------------
 
 
-async def ssh_execute(host: str, command: str, timeout_s: int = 30) -> dict[str, Any]:
+async def ssh_execute(
+    host: str, command: str, timeout_s: int = 30, _session: Any = None
+) -> dict[str, Any]:
     """Execute a shell command on a remote host via SSH."""
     logger.info("ssh_execute: host=%s command=%s", host, command)
     try:
         import asyncssh
 
-        async with asyncssh.connect(host, known_hosts=None, connect_timeout=timeout_s) as conn:
+        from runbookai.agent.credentials import SSHConfigurationError, get_ssh_creds
+
+        try:
+            creds = await get_ssh_creds(host, _session)
+        except SSHConfigurationError as e:
+            return {"status": "error", "error": str(e)}
+
+        connect_kwargs: dict[str, Any] = {
+            "host": host,
+            "username": creds.username,
+            "port": creds.port,
+            "known_hosts": None,
+            "connect_timeout": timeout_s,
+        }
+        if creds.private_key_pem:
+            connect_kwargs["client_keys"] = [asyncssh.import_private_key(creds.private_key_pem)]
+        elif creds.private_key_path:
+            connect_kwargs["client_keys"] = [creds.private_key_path]
+
+        async with asyncssh.connect(**connect_kwargs) as conn:
             result = await conn.run(command, timeout=timeout_s)
         return {
             "status": "ok",
@@ -43,20 +64,41 @@ async def ssh_execute(host: str, command: str, timeout_s: int = 30) -> dict[str,
         return {"status": "error", "error": str(e)}
 
 
-async def check_logs(host: str, service: str, lines: int = 100) -> dict[str, Any]:
+async def check_logs(
+    host: str, service: str, lines: int = 100, _session: Any = None
+) -> dict[str, Any]:
     """Tail the last N lines of a service log on a remote host via journalctl."""
     logger.info("check_logs: host=%s service=%s lines=%d", host, service, lines)
-    return await ssh_execute(host, f"journalctl -u {service} -n {lines} --no-pager")
+    return await ssh_execute(
+        host, f"journalctl -u {service} -n {lines} --no-pager", _session=_session
+    )
 
 
-async def restart_service(host: str, service: str) -> dict[str, Any]:
-    """Restart a systemd service on a remote host.
+async def restart_service(
+    host: str, service: str, _session: Any = None
+) -> dict[str, Any]:
+    """Restart a systemd service on a remote host via SSH.
 
-    TODO: SSH in, run `systemctl restart {service}`, verify status.
     HIGH-RISK — always requires approval in Suggest Mode.
     """
     logger.info("restart_service: host=%s service=%s", host, service)
-    return {"status": "not_implemented", "host": host, "service": service}
+    # Restart then immediately check status so the agent knows if it worked.
+    restart = await ssh_execute(
+        host, f"systemctl restart {service}", _session=_session
+    )
+    if restart["status"] == "error":
+        return restart
+    status = await ssh_execute(
+        host, f"systemctl is-active {service}", _session=_session
+    )
+    active = status.get("stdout", "").strip() == "active"
+    return {
+        "status": "ok",
+        "service": service,
+        "active": active,
+        "restart_exit_code": restart.get("exit_code"),
+        "is_active_stdout": status.get("stdout", "").strip(),
+    }
 
 
 async def http_check(url: str, expected_status: int = 200) -> dict[str, Any]:
@@ -224,6 +266,11 @@ TOOL_REGISTRY: dict[str, Any] = {
 # Tools that always require human approval even in autonomous mode.
 HIGH_RISK_TOOLS: frozenset[str] = frozenset(
     {"restart_service", "scale_service", "ssh_execute"}
+)
+
+# Tools that need the DB session injected as `_session` for credential lookup.
+SESSION_AWARE_TOOLS: frozenset[str] = frozenset(
+    {"ssh_execute", "check_logs", "restart_service"}
 )
 
 # ---------------------------------------------------------------------------

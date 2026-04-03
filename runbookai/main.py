@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from runbookai.api.approvals import router as approvals_router
+from runbookai.api.hosts import router as hosts_router
 from runbookai.api.incidents import router as incidents_router
 from runbookai.api.runbooks import router as runbooks_router
 from runbookai.api.webhooks import router as webhooks_router
@@ -21,6 +22,7 @@ app.include_router(webhooks_router)
 app.include_router(approvals_router)
 app.include_router(incidents_router)
 app.include_router(runbooks_router)
+app.include_router(hosts_router)
 _static = str(pathlib.Path(__file__).parent / "static")
 app.mount("/static", StaticFiles(directory=_static), name="static")
 

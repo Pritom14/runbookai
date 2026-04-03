@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     escalation_email: str = ""  # where to send escalation alerts
     slack_webhook_url: str = ""
+    # SSH defaults — used when no HostCredential row exists for a given host.
+    ssh_default_username: str = ""
+    ssh_private_key_path: str = ""  # path to PEM file, e.g. ~/.ssh/id_rsa
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 
