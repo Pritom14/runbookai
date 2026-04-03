@@ -9,6 +9,7 @@ from runbookai.api.analysis import router as analysis_router
 from runbookai.api.approvals import router as approvals_router
 from runbookai.api.hosts import router as hosts_router
 from runbookai.api.incidents import router as incidents_router
+from runbookai.api.postmortem import router as postmortem_router
 from runbookai.api.runbooks import router as runbooks_router
 from runbookai.api.webhooks import router as webhooks_router
 from runbookai.database import init_db
@@ -21,9 +22,11 @@ app = FastAPI(
 
 app.include_router(webhooks_router)
 app.include_router(approvals_router)
-# analysis must be registered before incidents so /incidents/analysis
-# is not captured by the /incidents/{incident_id} wildcard route.
+# analysis and postmortem must be registered before incidents so
+# /incidents/analysis and /incidents/{id}/postmortem are not captured
+# by the /incidents/{incident_id} wildcard route.
 app.include_router(analysis_router)
+app.include_router(postmortem_router)
 app.include_router(incidents_router)
 app.include_router(runbooks_router)
 app.include_router(hosts_router)

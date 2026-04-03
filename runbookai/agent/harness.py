@@ -37,6 +37,7 @@ from typing import Any
 from runbookai.agent.suggest_mode import RESOLVED, SuggestModeAgent
 from runbookai.config import settings
 from runbookai.models import IncidentStatus
+from runbookai.slack import send_slack_notification
 from runbookai.trace.recorder import AgentTraceRecorder
 
 logger = logging.getLogger("runbookai.harness")
@@ -148,6 +149,7 @@ class AgentHarness:
         # Update incident status to in_progress.
         incident.status = IncidentStatus.IN_PROGRESS
         await session.commit()
+        await send_slack_notification("incident_started", incident)
 
         actions_taken: list[dict[str, Any]] = []
         resolution_summary: str = ""
@@ -165,6 +167,7 @@ class AgentHarness:
                 incident.summary = resolution_summary
                 await session.commit()
                 await recorder.log_event("resolved", {"step": step + 1})
+                await send_slack_notification("incident_resolved", incident)
                 _ACTIVE_AGENTS.pop(self.incident_id, None)
                 logger.info("incident=%s resolved at step %d", self.incident_id, step + 1)
                 return IncidentResult(
@@ -182,6 +185,15 @@ class AgentHarness:
                 await session.commit()
                 await recorder.log_event(
                     "approval_requested",
+                    {
+                        "tool": action.tool_name,
+                        "approval_id": approval_id,
+                        "rationale": action.rationale,
+                    },
+                )
+                await send_slack_notification(
+                    "approval_needed",
+                    incident,
                     {
                         "tool": action.tool_name,
                         "approval_id": approval_id,
@@ -338,20 +350,7 @@ class AgentHarness:
         else:
             logger.warning("escalation_email or smtp_host not set — skipping email")
 
-        if settings.slack_webhook_url:
-            import httpx
-
-            payload = {
-                "text": (
-                    f":rotating_light: *RunbookAI Escalation*\n"
-                    f"Incident: `{incident.alert_name}`\n"
-                    f"Status: {incident.status}\n"
-                    f"Summary: {reason or 'No summary available.'}"
-                )
-            }
-            async with httpx.AsyncClient() as client:
-                await client.post(settings.slack_webhook_url, json=payload, timeout=10.0)
-            logger.info("incident=%s slack escalation sent", incident.id)
+        await send_slack_notification("incident_escalated", incident, {"reason": reason})
 
 
 # ---------------------------------------------------------------------------

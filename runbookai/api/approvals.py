@@ -8,7 +8,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from runbookai.database import get_session
-from runbookai.models import ApprovalRequest, ApprovalStatus
+from runbookai.models import ApprovalRequest, ApprovalStatus, Incident
+from runbookai.slack import send_slack_notification
 from runbookai.trace.recorder import AgentTraceRecorder
 
 logger = logging.getLogger("runbookai.api.approvals")
@@ -40,6 +41,11 @@ async def approve_action(
         "approval_granted",
         {"tool": approval.tool_name, "approval_id": action_id},
     )
+    incident = await session.get(Incident, approval.incident_id)
+    if incident:
+        await send_slack_notification(
+            "approval_granted", incident, {"tool": approval.tool_name}
+        )
 
     # Re-enter the agent harness for this incident.
     from runbookai.agent.harness import AgentHarness
@@ -95,6 +101,11 @@ async def reject_action(
         "approval_rejected",
         {"tool": approval.tool_name, "approval_id": action_id, "reason": reason},
     )
+    incident = await session.get(Incident, approval.incident_id)
+    if incident:
+        await send_slack_notification(
+            "approval_rejected", incident, {"tool": approval.tool_name, "reason": reason}
+        )
 
     logger.info(
         "action rejected: action_id=%s incident=%s reason=%s",

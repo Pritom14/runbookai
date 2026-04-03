@@ -16,6 +16,10 @@ No more 3am pages for problems your runbook already solves.
 
 Every action is logged to the **AgentTrace** replay timeline — see exactly what the agent did, which tools it called, and where it paused.
 
+**Regression detection:** if the same service alerts again within 6 hours of a prior remediation, the agent is warned not to repeat the last fix — it digs deeper to find the root cause.
+
+After resolution, a **postmortem draft** is auto-generated from the trace: full timeline, actions taken, regression analysis, and recommended follow-ups.
+
 ## Quickstart
 
 **Prerequisites:** Python 3.11+, [Ollama](https://ollama.com)
@@ -147,10 +151,25 @@ DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/runbookai
 
 Agent conversation history is persisted after every turn — survives server restarts mid-incident.
 
-## Escalation
+## Slack notifications
+
+RunbookAI posts rich Slack messages at every incident lifecycle event:
+
+| Event | What's sent |
+|-------|-------------|
+| Incident starts | Alert name, service, severity, link to replay UI |
+| Approval required | Tool name, rationale, curl command to approve |
+| Approval granted/rejected | Confirmation with tool name |
+| Incident resolved | Duration, summary, link to postmortem |
+| Incident escalated | Reason, incident link |
 
 ```
 SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
+```
+
+For email escalation:
+
+```
 ESCALATION_EMAIL=oncall@yourcompany.com
 SMTP_HOST=smtp.gmail.com
 SMTP_USER=you@gmail.com
@@ -167,6 +186,9 @@ SMTP_PASSWORD=...
 | `GET /incidents/{id}` | Incident detail |
 | `GET /incidents/{id}/replay` | AgentTrace timeline (JSON) |
 | `GET /incidents/{id}/replay/ui` | AgentTrace replay UI |
+| `GET /incidents/{id}/postmortem` | Auto-generated postmortem markdown |
+| `GET /incidents/analysis` | Pattern summary — MTTR, top tools, regressions per service |
+| `GET /incidents/compare` | Side-by-side diff of two incident traces |
 | `POST /approvals/{id}/approve` | Approve a proposed action |
 | `POST /approvals/{id}/reject` | Reject a proposed action |
 | `POST /runbooks` | Create runbook |
