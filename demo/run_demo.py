@@ -133,18 +133,18 @@ SCENARIO_LABELS = {
 # ---------------------------------------------------------------------------
 
 TOOL_ICONS = {
-    "http_check":        "🌐",
-    "check_logs":        "📋",
-    "check_disk":        "💾",
-    "check_processes":   "⚙️ ",
-    "query_metrics":     "📊",
-    "run_db_check":      "🗄️ ",
-    "restart_service":   "🔄",
-    "clear_disk":        "🧹",
-    "ssh_execute":       "🖥️ ",
-    "scale_service":     "📈",
-    "finish":            "✅",
-    "_event":            "◆",
+    "http_check":        "[http]  ",
+    "check_logs":        "[logs]  ",
+    "check_disk":        "[disk]  ",
+    "check_processes":   "[proc]  ",
+    "query_metrics":     "[metr]  ",
+    "run_db_check":      "[db]    ",
+    "restart_service":   "[restart]",
+    "clear_disk":        "[clear] ",
+    "ssh_execute":       "[ssh]   ",
+    "scale_service":     "[scale] ",
+    "finish":            "[done]  ",
+    "_event":            ">>",
 }
 
 HIGH_RISK = {"restart_service", "clear_disk", "scale_service", "ssh_execute"}
@@ -162,7 +162,7 @@ def fmt_tool_output(tool: str, output: dict | None) -> str:
         lines.append(f"    {mark}  HTTP {status_code}  latency={latency}ms")
     elif tool == "check_disk":
         for m in output.get("critical_mounts", []):
-            lines.append(f"    {c(RED, '⚠ CRITICAL')} {m['mount']}  {m['used_pct']} used")
+            lines.append(f"    {c(RED, '! CRITICAL')} {m['mount']}  {m['used_pct']} used")
         for m in output.get("mounts", []):
             if m not in output.get("critical_mounts", []):
                 lines.append(f"    {c(DIM, m['mount'])}  {m['used_pct']} used")
@@ -220,7 +220,7 @@ def print_step(step: dict, idx: int) -> None:
 
     if tool == "_event":
         event_name = output.get("tool_input", {}).get("event", "event")
-        print(f"  {c(MAGENTA, f'◆ {event_name}')}")
+        print(f"  {c(MAGENTA, f'>> {event_name}')}")
         return
 
     risk_label = c(RED, " [HIGH-RISK]") if tool in HIGH_RISK else ""
@@ -287,7 +287,7 @@ def handle_approval(base: str, incident_id: str, auto_approve: bool) -> None:
 
     print()
     hr("━")
-    print(f"  {c(YELLOW, '⚠  APPROVAL REQUIRED')}")
+    print(f"  {c(YELLOW, '!  APPROVAL REQUIRED')}")
     print(f"  Tool:      {c(BOLD, tool_name)}")
     print(f"  Rationale: {c(DIM, rationale[:120])}")
     hr("━")
@@ -369,7 +369,7 @@ def run_single_scenario(
     label = label_prefix or SCENARIO_LABELS[scenario]
     section(f"SCENARIO: {label}")
 
-    print(f"  {c(RED, '🚨 ALERT RECEIVED')}")
+    print(f"  {c(RED, 'ALERT RECEIVED')}")
     print(f"  {c(BOLD, alert['alert_name'])}")
     print(f"  {c(DIM, alert['details'])}")
     print()
@@ -378,7 +378,7 @@ def run_single_scenario(
     resp = post(base, "/webhooks/generic", alert)
     if resp.get("possible_regression"):
         prior = resp.get("prior_incident_id")
-        print(c(YELLOW, f"  ⚠  REGRESSION DETECTED — prior incident {prior}"))
+        print(c(YELLOW, f"  !  REGRESSION DETECTED — prior incident {prior}"))
     incident_id = resp.get("incident_id")
     if not incident_id:
         print(c(RED, f"  ✗  Failed to create incident: {resp}"))
@@ -465,7 +465,7 @@ def run_regression_scenario(base: str, auto_approve: bool) -> None:
         print()
 
         if diff.get("is_regression"):
-            print(c(RED, "  ⚠  RunbookAI flagged this as a CONFIRMED REGRESSION"))
+            print(c(RED, "  !  RunbookAI flagged this as a CONFIRMED REGRESSION"))
 
         gap = diff.get("gap_minutes")
         if gap is not None:
@@ -495,10 +495,10 @@ def run_regression_scenario(base: str, auto_approve: bool) -> None:
     analysis = get(base, "/incidents/analysis?hours=1")
     regressions = analysis.get("regressions_detected", 0)
     if regressions:
-        print(c(RED, f"  📊 Pattern analysis: {regressions} regression(s) in the last hour"))
+        print(c(RED, f"  >> Pattern analysis: {regressions} regression(s) in the last hour"))
     auto_rate = analysis.get("auto_resolution_rate_pct", 0)
     total = analysis.get("total_incidents", 0)
-    print(c(DIM, f"  📊 {total} incidents processed  |  {auto_rate}% auto-resolution rate"))
+    print(c(DIM, f"  >> {total} incidents processed  |  {auto_rate}% auto-resolution rate"))
     print()
 
 
