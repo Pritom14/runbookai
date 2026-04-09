@@ -107,11 +107,11 @@ async def test_generic_webhook_accepted():
 
 
 @pytest.mark.asyncio
-async def test_generic_webhook_no_alert_name():
+async def test_generic_webhook_missing_alert_name_returns_422():
+    """Payloads missing the required alert_name field must be rejected."""
     async with AsyncClient(transport=ASGITransport(app=_app()), base_url="http://test") as ac:
         response = await ac.post("/webhooks/generic", json={})
-    assert response.status_code == 200
-    assert response.json()["alert_name"] == "Unknown alert"
+    assert response.status_code == 422
 
 
 # ---------------------------------------------------------------------------

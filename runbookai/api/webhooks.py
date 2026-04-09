@@ -5,6 +5,7 @@ import uuid
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -113,25 +114,32 @@ async def pagerduty_webhook(
     }
 
 
+class GenericWebhookPayload(BaseModel):
+    alert_name: str
+    description: str = ""
+    host: str = ""
+    service: str = ""
+    severity: str = "unknown"
+
+
 @router.post("/generic")
 async def generic_webhook(
-    request: Request,
+    payload: GenericWebhookPayload,
     background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_session),
 ):
     """Receive a generic alert payload.
 
-    Expected body:
-        {
-            "alert_name": "High CPU on web-01",
-            "description": "...",
-            "host": "web-01",        # optional
-            "severity": "high"       # optional
-        }
+    Required fields:
+        alert_name (str): Human-readable name of the alert.
+
+    Optional fields:
+        description, host, service, severity.
+
+    Returns 422 if required fields are missing.
     """
-    payload = await request.json()
-    alert_name = payload.get("alert_name", "Unknown alert")
-    service = payload.get("service", "")
+    alert_name = payload.alert_name
+    service = payload.service
 
     is_regression, prior_id, prior_summary = await detect_regression(session, service)
     if is_regression:
@@ -143,7 +151,7 @@ async def generic_webhook(
         id=str(uuid.uuid4()),
         source="generic",
         alert_name=alert_name,
-        alert_body=payload,
+        alert_body=payload.model_dump(),
         possible_regression=is_regression,
         prior_incident_id=prior_id,
     )
