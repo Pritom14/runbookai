@@ -365,28 +365,3 @@ _DEFAULT_RUNBOOK = """\
 5. Call finish() with a summary.
 """
 
-import yaml
-from runbookai.agent.tools import ssh_execute
-
-def load_runbook(runbook_path):
-    with open(runbook_path, 'r') as f:
-        return yaml.safe_load(f)
-
-async def execute_tool(tool, host):
-    result = await ssh_execute(host, tool['command'])
-    print(f"Executed {tool['name']}: {result}")
-    return result
-
-async def handle_hardware_incident(runbook, host):
-    for tool in runbook:
-        if tool['name'] == 'restart_service':
-            approval_id = await create_approval_request(tool)
-            update_incident_status(approval_id, IncidentStatus.WAITING_APPROVAL)
-            print(f"Waiting for approval for {tool['name']} (ID: {approval_id})")
-            break
-        else:
-            await execute_tool(tool, host)
-            print(f"Completed {tool['name']}")
-    else:
-        print("Incident resolved")
-        update_incident_status(None, IncidentStatus.RESOLVED)

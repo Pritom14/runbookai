@@ -1,10 +1,11 @@
 
 import asyncio
+import logging
 import os
 import signal
-import httpx
-import logging
 from subprocess import run, PIPE
+
+import httpx
 
 logger = logging.getLogger("runbookai.agent.ipmi_poller")
 
