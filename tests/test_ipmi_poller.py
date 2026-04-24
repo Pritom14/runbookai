@@ -1,6 +1,6 @@
-import pytest
 from unittest.mock import patch
-from runbookai.agent.ipmi_poller import parse_sensor_output, check_thresholds, alert
+
+from runbookai.agent.ipmi_poller import alert, check_thresholds, parse_sensor_output
 
 
 def test_parse_sensor_output_temperature():

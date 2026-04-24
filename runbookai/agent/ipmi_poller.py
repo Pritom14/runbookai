@@ -3,7 +3,7 @@ import asyncio
 import logging
 import os
 import signal
-from subprocess import run, PIPE
+from subprocess import PIPE, run
 
 import httpx
 
@@ -19,7 +19,11 @@ async def poll_ipmi_sensors():
     while True:
         try:
             result = run(
-                ["ipmitool", "-I", "lanplus", "-H", IPMI_HOST, "-U", IPMI_USER, "-P", IPMI_PASSWORD, "sdr", "elist"],
+                [
+                    "ipmitool", "-I", "lanplus",
+                    "-H", IPMI_HOST, "-U", IPMI_USER, "-P", IPMI_PASSWORD,
+                    "sdr", "elist",
+                ],
                 stdout=PIPE, stderr=PIPE, text=True, check=True,
             )
             sensor_data = parse_sensor_output(result.stdout)

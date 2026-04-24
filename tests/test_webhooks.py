@@ -260,7 +260,10 @@ async def test_approve_action_409_if_already_approved():
 @pytest.mark.asyncio
 async def test_hardware_webhook_accepted():
     async with AsyncClient(transport=ASGITransport(app=_app()), base_url="http://test") as ac:
-        response = await ac.post("/webhooks/hardware", json={"title": "Fan failure", "description": "Fan speed low"})
+        response = await ac.post(
+            "/webhooks/hardware",
+            json={"title": "Fan failure", "description": "Fan speed low"},
+        )
     assert response.status_code == 200
     assert response.json()["status"] == "accepted"
 
