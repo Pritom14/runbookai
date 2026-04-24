@@ -255,3 +255,27 @@ async def test_approve_action_409_if_already_approved():
     async with AsyncClient(transport=ASGITransport(app=_app()), base_url="http://test") as ac:
         response = await ac.post(f"/approvals/{approval_id}/approve")
     assert response.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_hardware_webhook_accepted():
+    async with AsyncClient(transport=ASGITransport(app=_app()), base_url="http://test") as ac:
+        response = await ac.post("/webhooks/hardware", json={"title": "Fan failure", "description": "Fan speed low"})
+    assert response.status_code == 200
+    assert response.json()["status"] == "accepted"
+
+
+@pytest.mark.asyncio
+async def test_hardware_webhook_uses_title_as_alert_name():
+    async with AsyncClient(transport=ASGITransport(app=_app()), base_url="http://test") as ac:
+        response = await ac.post("/webhooks/hardware", json={"title": "Disk failure"})
+    assert response.status_code == 200
+    assert response.json()["alert_name"] == "Disk failure"
+
+
+@pytest.mark.asyncio
+async def test_hardware_webhook_fallback_alert_name():
+    async with AsyncClient(transport=ASGITransport(app=_app()), base_url="http://test") as ac:
+        response = await ac.post("/webhooks/hardware", json={"alert_name": "CPU overheat"})
+    assert response.status_code == 200
+    assert response.json()["alert_name"] == "CPU overheat"

@@ -102,6 +102,15 @@ Switch to autonomous: `SUGGEST_MODE=false` in `.env`.
 
 High-risk tools always require approval in Suggest Mode.
 
+## Hardware Integration
+
+RunbookAI polls physical server sensors via IPMI using `runbookai/agent/ipmi_poller.py`. The daemon polls CPU temperature, fan speed, power draw, and disk SMART status every 60 seconds. When thresholds are exceeded (CPU temp >80°C, fan speed <500 RPM), it fires an alert to `/webhooks/hardware`, which triggers the full autonomous incident response loop.
+
+Start the poller:
+```bash
+IPMI_HOST=192.168.1.10 IPMI_USER=admin IPMI_PASSWORD=secret python -m runbookai.agent.ipmi_poller
+```
+
 ## Runbooks
 
 Runbooks are matched to alerts by substring on `alert_name`. The agent reads the matching runbook before acting.
@@ -196,21 +205,13 @@ RunbookAI posts rich Slack messages at every incident lifecycle event:
 SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
 ```
 
-For email escalation:
-
-```
-ESCALATION_EMAIL=oncall@yourcompany.com
-SMTP_HOST=smtp.gmail.com
-SMTP_USER=you@gmail.com
-SMTP_PASSWORD=...
-```
-
 ## API
 
 | Endpoint | Description |
 |---|---|
 | `POST /webhooks/pagerduty` | Receive PagerDuty alert |
 | `POST /webhooks/generic` | Receive generic JSON alert |
+| `POST /webhooks/hardware` | Receive hardware sensor alert (IPMI, thermal, fan) |
 | `GET /incidents` | List all incidents |
 | `GET /incidents/{id}` | Incident detail |
 | `GET /incidents/{id}/replay` | AgentTrace timeline (JSON) |

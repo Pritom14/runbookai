@@ -562,3 +562,8 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+def main():
+    print('Test message from the demo script')
+
+if __name__ == '__main__':
+    main()

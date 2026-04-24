@@ -169,3 +169,17 @@ async def generic_webhook(
         "possible_regression": is_regression,
         "prior_incident_id": prior_id,
     }
+
+@router.post("/hardware")
+async def hardware_webhook(request: Request, background_tasks: BackgroundTasks, session: AsyncSession = Depends(get_session)):
+    payload = await request.json()
+    alert_name = payload.get("title", payload.get("alert_name", "Unknown hardware alert"))
+    service = payload.get("service", "")
+    is_regression, prior_id, prior_summary = await detect_regression(session, service)
+    incident = Incident(id=str(uuid.uuid4()), source="hardware", alert_name=alert_name, alert_body=payload, possible_regression=is_regression, prior_incident_id=prior_id)
+    session.add(incident)
+    await session.commit()
+    await session.refresh(incident)
+    background_tasks.add_task(run_agent_for_incident, incident.id)
+    logger.info("Hardware alert received: %s incident_id=%s", alert_name, incident.id)
+    return {"status": "accepted", "alert_name": alert_name, "incident_id": incident.id, "possible_regression": is_regression, "prior_incident_id": prior_id}

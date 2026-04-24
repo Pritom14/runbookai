@@ -1,0 +1,12 @@
+description: "High temperature alert runbook"
+alert_name: "high_temperature"
+steps:
+  - name: "check_disk"
+    action: "check_disk"
+    approval_required: true
+  - name: "check_processes"
+    action: "check_processes"
+    approval_required: true
+  - name: "restart_service"
+    action: "restart_service"
+    approval_required: true
