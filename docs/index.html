@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RunbookAI — Autonomous Incident Response</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0a0a0a;
+      color: #e5e5e5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    nav {
+      padding: 24px 48px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #1a1a1a;
+    }
+
+    .logo {
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: -0.3px;
+      color: #fff;
+    }
+
+    .logo span { color: #6366f1; }
+
+    nav a {
+      color: #888;
+      text-decoration: none;
+      font-size: 14px;
+      transition: color 0.2s;
+    }
+
+    nav a:hover { color: #fff; }
+
+    .hero {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 80px 24px;
+    }
+
+    .badge {
+      display: inline-block;
+      background: #1a1a2e;
+      border: 1px solid #6366f1;
+      color: #818cf8;
+      font-size: 12px;
+      font-weight: 500;
+      padding: 6px 16px;
+      border-radius: 100px;
+      margin-bottom: 32px;
+      letter-spacing: 0.5px;
+    }
+
+    h1 {
+      font-size: clamp(40px, 6vw, 72px);
+      font-weight: 700;
+      line-height: 1.1;
+      letter-spacing: -2px;
+      color: #fff;
+      max-width: 800px;
+      margin-bottom: 24px;
+    }
+
+    h1 em {
+      font-style: normal;
+      color: #6366f1;
+    }
+
+    .subtitle {
+      font-size: 18px;
+      color: #888;
+      max-width: 520px;
+      line-height: 1.6;
+      margin-bottom: 48px;
+    }
+
+    .cta-group {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .btn-primary {
+      background: #6366f1;
+      color: #fff;
+      text-decoration: none;
+      padding: 14px 28px;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 500;
+      transition: background 0.2s;
+    }
+
+    .btn-primary:hover { background: #4f46e5; }
+
+    .btn-ghost {
+      color: #888;
+      text-decoration: none;
+      padding: 14px 28px;
+      border-radius: 8px;
+      border: 1px solid #2a2a2a;
+      font-size: 15px;
+      font-weight: 500;
+      transition: border-color 0.2s, color 0.2s;
+    }
+
+    .btn-ghost:hover { border-color: #555; color: #ddd; }
+
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1px;
+      background: #1a1a1a;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+
+    .feature {
+      background: #0a0a0a;
+      padding: 40px 32px;
+    }
+
+    .feature-icon {
+      font-size: 24px;
+      margin-bottom: 16px;
+    }
+
+    .feature h3 {
+      font-size: 15px;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+
+    .feature p {
+      font-size: 14px;
+      color: #666;
+      line-height: 1.6;
+    }
+
+    .terminal {
+      background: #111;
+      border: 1px solid #1f1f1f;
+      border-radius: 12px;
+      padding: 32px 48px;
+      max-width: 680px;
+      width: 100%;
+      margin: 64px auto;
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 14px;
+    }
+
+    .terminal-header {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 24px;
+    }
+
+    .dot { width: 12px; height: 12px; border-radius: 50%; }
+    .dot-red { background: #ff5f57; }
+    .dot-yellow { background: #ffbd2e; }
+    .dot-green { background: #28c840; }
+
+    .line { color: #555; margin: 4px 0; }
+    .line .prompt { color: #6366f1; }
+    .line .cmd { color: #e5e5e5; }
+    .line .out { color: #22c55e; }
+    .line .dim { color: #444; }
+
+    footer {
+      padding: 32px 48px;
+      border-top: 1px solid #1a1a1a;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    footer p { font-size: 13px; color: #444; }
+    footer a { color: #666; text-decoration: none; font-size: 13px; }
+    footer a:hover { color: #aaa; }
+  </style>
+</head>
+<body>
+
+  <nav>
+    <div class="logo">Runbook<span>AI</span></div>
+    <a href="https://github.com/Pritom14/runbookai" target="_blank">GitHub</a>
+  </nav>
+
+  <section class="hero">
+    <div class="badge">Open Source · Self-Learning · Autonomous</div>
+    <h1>Infrastructure that <em>heals itself</em></h1>
+    <p class="subtitle">
+      RunbookAI detects, diagnoses, and remediates incidents autonomously.
+      No runbooks written by humans. No on-call pages at 3am.
+    </p>
+    <div class="cta-group">
+      <a href="https://github.com/Pritom14/runbookai" class="btn-primary" target="_blank">View on GitHub</a>
+      <a href="https://github.com/Pritom14/runbookai#readme" class="btn-ghost" target="_blank">Read the docs</a>
+    </div>
+  </section>
+
+  <section class="features">
+    <div class="feature">
+      <div class="feature-icon">&#9889;</div>
+      <h3>Autonomous Response</h3>
+      <p>Agent diagnoses root cause using SSH, logs, metrics, and HTTP checks — then remediates without waiting for a human.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">&#129504;</div>
+      <h3>Self-Learning</h3>
+      <p>Every resolved incident becomes an experience. The agent gets smarter with each outage — no prompt engineering required.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">&#128274;</div>
+      <h3>Human-in-the-Loop</h3>
+      <p>High-risk actions (restarts, deploys) pause and wait for approval. You stay in control of what matters.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">&#128200;</div>
+      <h3>Full Replay</h3>
+      <p>Every action the agent takes is traced and visible. Postmortems write themselves.</p>
+    </div>
+  </section>
+
+  <div class="terminal">
+    <div class="terminal-header">
+      <div class="dot dot-red"></div>
+      <div class="dot dot-yellow"></div>
+      <div class="dot dot-green"></div>
+    </div>
+    <div class="line"><span class="dim"># Alert received: demo-app CPU high (critical)</span></div>
+    <div class="line">&nbsp;</div>
+    <div class="line"><span class="prompt">&#8250;</span> <span class="cmd">check_processes host=web-01</span></div>
+    <div class="line"><span class="out">  stress-ng running, 4 workers, 98% CPU</span></div>
+    <div class="line">&nbsp;</div>
+    <div class="line"><span class="prompt">&#8250;</span> <span class="cmd">ssh_execute "pkill stress-ng"</span></div>
+    <div class="line"><span class="out">  exit_code=0, process terminated</span></div>
+    <div class="line">&nbsp;</div>
+    <div class="line"><span class="prompt">&#8250;</span> <span class="cmd">http_check host=web-01 port=80</span></div>
+    <div class="line"><span class="out">  healthy=true, latency=12ms</span></div>
+    <div class="line">&nbsp;</div>
+    <div class="line"><span class="dim"># Incident resolved in 23s. Experience saved.</span></div>
+  </div>
+
+  <footer>
+    <p>Built by <a href="https://github.com/Pritom14" target="_blank">Pritom Mazumdar</a></p>
+    <a href="https://github.com/Pritom14/runbookai" target="_blank">github.com/Pritom14/runbookai</a>
+  </footer>
+
+</body>
+</html>
