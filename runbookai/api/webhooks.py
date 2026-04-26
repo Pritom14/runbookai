@@ -3,6 +3,7 @@
 import logging
 import uuid
 from datetime import datetime, timedelta
+from typing import Optional, Tuple
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request
 from pydantic import BaseModel
@@ -23,7 +24,7 @@ _REGRESSION_WINDOW_HOURS = 6
 
 async def detect_regression(
     session: AsyncSession, service: str
-) -> tuple[bool, str | None, str | None]:
+) -> Tuple[bool, Optional[str], Optional[str]]:
     """Check if service had a recent remediation that may not have fixed the root cause.
 
     Returns (is_regression, prior_incident_id, prior_summary).

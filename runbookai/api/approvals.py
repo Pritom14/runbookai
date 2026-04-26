@@ -2,6 +2,7 @@
 
 import logging
 from datetime import datetime
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -22,7 +23,7 @@ async def approve_action(
     session: AsyncSession = Depends(get_session),
 ):
     """Approve a proposed action. The agent will execute it immediately after."""
-    approval: ApprovalRequest | None = await session.get(ApprovalRequest, action_id)
+    approval: Optional[ApprovalRequest] = await session.get(ApprovalRequest, action_id)
     if approval is None:
         raise HTTPException(status_code=404, detail=f"ApprovalRequest {action_id} not found")
     if approval.status != ApprovalStatus.PENDING:
@@ -82,7 +83,7 @@ async def reject_action(
     session: AsyncSession = Depends(get_session),
 ):
     """Reject a proposed action. The agent will skip it and propose an alternative."""
-    approval: ApprovalRequest | None = await session.get(ApprovalRequest, action_id)
+    approval: Optional[ApprovalRequest] = await session.get(ApprovalRequest, action_id)
     if approval is None:
         raise HTTPException(status_code=404, detail=f"ApprovalRequest {action_id} not found")
     if approval.status != ApprovalStatus.PENDING:

@@ -70,7 +70,7 @@ Incident response is deeply custom—every company's runbooks, tools, and risk t
 
 ### No API Keys Needed
 
-Runs on Ollama locally. qwen2.5:7b is small, fast, and good enough for runbook reasoning. Everything stays on your infrastructure.
+Runs on Ollama locally. qwen2.5:7b is small, fast, and good enough for runbook reasoning. Everything stays on your infrastructure. Or swap in OpenAI, Anthropic, or Groq with a single env var — no code changes.
 
 ---
 

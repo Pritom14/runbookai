@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from typing import Optional
 
 from sqlalchemy import select
 
@@ -27,11 +28,11 @@ class SSHCredentials:
     username: str
     port: int = 22
     # Exactly one of private_key_pem or private_key_path will be set.
-    private_key_pem: str | None = None
-    private_key_path: str | None = None
+    private_key_pem: Optional[str] = None
+    private_key_path: Optional[str] = None
 
 
-async def get_ssh_creds(host: str, session: object | None) -> SSHCredentials:
+async def get_ssh_creds(host: str, session: Optional[object]) -> SSHCredentials:
     """Return SSH credentials for *host*.
 
     Parameters
@@ -47,7 +48,7 @@ async def get_ssh_creds(host: str, session: object | None) -> SSHCredentials:
         result = await session.execute(
             select(HostCredential).where(HostCredential.hostname == host)
         )
-        row: HostCredential | None = result.scalar_one_or_none()
+        row: Optional[HostCredential] = result.scalar_one_or_none()
         if row is not None:
             logger.debug("ssh creds: DB row found for host=%s user=%s", host, row.username)
             return SSHCredentials(

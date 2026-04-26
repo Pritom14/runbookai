@@ -1,0 +1,2 @@
+alert_pattern: 'demo-app service down'
+content: "Step 1: http_check http://localhost:8080. Step 2: check_processes on host web-01 for nginx. Step 3: If nginx not running, ssh_execute on host web-01: nginx. Step 4: http_check again. Step 5: finish() with summary."

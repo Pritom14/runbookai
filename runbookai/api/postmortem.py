@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -51,7 +51,7 @@ async def get_postmortem(
 # ---------------------------------------------------------------------------
 
 
-def _fmt_duration(seconds: int | None) -> str:
+def _fmt_duration(seconds: Optional[int]) -> str:
     if seconds is None:
         return "n/a"
     m, s = divmod(seconds, 60)
@@ -72,7 +72,7 @@ def _build_postmortem_markdown(incident: Incident, actions: list[AgentAction]) -
 
     # Duration
     duration_str = "Ongoing"
-    duration_secs: int | None = None
+    duration_secs: Optional[int] = None
     if incident.resolved_at and incident.created_at:
         duration_secs = int((incident.resolved_at - incident.created_at).total_seconds())
         duration_str = _fmt_duration(duration_secs)

@@ -1,0 +1,29 @@
+2026-04-26 00:08:59,963 - INFO - Starting attack: CPU spike
+2026-04-26 00:10:30,468 - INFO - Starting attack: Process kill
+2026-04-26 00:11:30,795 - INFO - Starting attack: OOM
+2026-04-26 00:12:51,650 - INFO - Starting attack: Disk fill
+2026-04-26 00:13:52,148 - INFO - Starting attack: Hardware temp
+2026-04-26 00:14:52,565 - INFO - Starting attack: Network latency
+2026-04-26 00:14:52,720 - ERROR - Failed to run attack Network latency: Command 'docker exec demo-app sh -c 'tc qdisc add dev eth0 root netem delay 800ms'' returned non-zero exit status 2.
+2026-04-26 00:15:53,056 - INFO - Starting attack: Log spam
+2026-04-26 00:17:56,740 - INFO - Starting attack: File handle exhaustion
+2026-04-26 00:17:56,858 - ERROR - Failed to run attack File handle exhaustion: Command 'docker exec demo-app sh -c 'for i in {1..100}; do exec 200>/tmp/fd$i; done'' returned non-zero exit status 127.
+2026-04-26 00:18:57,165 - INFO - Starting attack: Zombie processes
+2026-04-26 00:19:57,596 - INFO - Starting attack: DNS broken
+2026-04-26 00:20:58,061 - INFO - Starting attack: Slow disk I/O
+2026-04-26 00:22:23,515 - INFO - Starting attack: Repeat process kill
+2026-04-26 01:03:48,853 - INFO - Starting attack: CPU spike
+2026-04-26 20:38:20,437 - INFO - Starting attack: CPU spike
+2026-04-26 20:39:50,938 - INFO - Starting attack: Process kill
+2026-04-26 20:40:51,412 - INFO - Starting attack: OOM
+2026-04-26 20:42:12,121 - INFO - Starting attack: Disk fill
+2026-04-26 20:43:12,689 - INFO - Starting attack: Hardware temp
+2026-04-26 20:44:13,255 - INFO - Starting attack: Network latency
+2026-04-26 20:44:13,418 - ERROR - Failed to run attack Network latency: Command 'docker exec demo-app sh -c 'tc qdisc add dev eth0 root netem delay 800ms'' returned non-zero exit status 2.
+2026-04-26 20:45:13,810 - INFO - Starting attack: Log spam
+2026-04-26 20:47:15,150 - INFO - Starting attack: File handle exhaustion
+2026-04-26 20:47:15,299 - ERROR - Failed to run attack File handle exhaustion: Command 'docker exec demo-app sh -c 'for i in {1..100}; do exec 200>/tmp/fd$i; done'' returned non-zero exit status 127.
+2026-04-26 20:48:15,718 - INFO - Starting attack: Zombie processes
+2026-04-26 20:49:16,230 - INFO - Starting attack: DNS broken
+2026-04-26 20:50:16,790 - INFO - Starting attack: Slow disk I/O
+2026-04-26 20:51:42,376 - INFO - Starting attack: Repeat process kill

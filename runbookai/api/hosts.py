@@ -11,7 +11,7 @@ Endpoints:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -26,7 +26,7 @@ router = APIRouter(prefix="/api/hosts", tags=["hosts"])
 class HostCredentialIn(BaseModel):
     hostname: str = Field(..., description="Hostname or IP of the remote server")
     username: str = Field(..., description="SSH login username")
-    private_key_pem: str | None = Field(
+    private_key_pem: Optional[str] = Field(
         None,
         description="PEM-encoded SSH private key. Leave null to use the global key from settings.",
     )

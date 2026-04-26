@@ -1,0 +1,7 @@
+---
+- name: check_disk
+  description: Checks disk space on the server
+  command: df -h
+- name: check_processes
+  description: Checks running processes on the server
+  command: ps aux

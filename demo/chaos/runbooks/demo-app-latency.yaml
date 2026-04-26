@@ -1,0 +1,2 @@
+alert_pattern: 'demo-app high latency'
+content: "Step 1: http_check http://localhost:8080. Step 2: ssh_execute on host web-01: tc qdisc del dev eth0 root (to remove network delay). Step 3: http_check again. Step 4: finish() with summary."

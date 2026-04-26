@@ -1,15 +1,18 @@
-FROM python:3.11-slim
+FROM ubuntu:22.04
 
-WORKDIR /app
+RUN apt-get update && apt-get install -y openssh-server nginx stress-ng procps iproute2 dnsutils net-tools
 
-# Install dependencies first (layer caches unless pyproject.toml changes)
-COPY pyproject.toml .
-RUN pip install --no-cache-dir -e . 2>/dev/null || true
+RUN mkdir -p /run/sshd
 
-# Copy source
-COPY . .
-RUN pip install --no-cache-dir -e .
+COPY demo/chaos/keys/authorized_keys /run/sshd/authorized_keys
+RUN chmod 600 /run/sshd/authorized_keys
+RUN chown root:root /run/sshd/authorized_keys
 
-EXPOSE 7000
+RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
 
-CMD ["uvicorn", "runbookai.main:app", "--host", "0.0.0.0", "--port", "7000"]
+EXPOSE 22
+
+COPY demo/chaos/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+CMD ["/entrypoint.sh"]

@@ -25,6 +25,17 @@
       gap: 16px;
       flex-wrap: wrap;
     }
+    #back-link {
+      font-size: 0.8rem;
+      color: #64748b;
+      text-decoration: none;
+      white-space: nowrap;
+      border: 1px solid #2d3148;
+      border-radius: 6px;
+      padding: 4px 10px;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    #back-link:hover { color: #e2e8f0; border-color: #4b5563; }
     #incident-name {
       font-size: 1.25rem;
       font-weight: 600;
@@ -34,6 +45,59 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+
+    /* ── Attack context banner ── */
+    #attack-banner {
+      max-width: 860px;
+      margin: 20px auto 0;
+      padding: 0 24px;
+      display: none;
+    }
+    #attack-banner.visible { display: block; }
+    .attack-banner-inner {
+      background: #1c0a0a;
+      border: 1px solid #7f1d1d;
+      border-radius: 8px;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .attack-label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #f87171;
+      white-space: nowrap;
+    }
+    .attack-cmd {
+      font-family: "SF Mono", "Fira Code", Menlo, monospace;
+      font-size: 0.82rem;
+      color: #fca5a5;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 5px;
+      padding: 3px 10px;
+    }
+
+    /* ── Runbook banner (prominent) ── */
+    .step-runbook {
+      background: #0f172a !important;
+      border: 1px solid #1e3a5f !important;
+    }
+    .step-runbook .step-tool {
+      color: #60a5fa !important;
+    }
+    .step-runbook-preview {
+      font-size: 0.75rem;
+      color: #475569;
+      font-family: "SF Mono", "Fira Code", Menlo, monospace;
+      margin-top: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .badge {
       display: inline-block;
@@ -234,9 +298,17 @@
 <body>
 
 <div id="header">
+  <a id="back-link" href="/static/demo-dashboard.html">← Dashboard</a>
   <span id="incident-name">Loading…</span>
   <span id="status-badge" class="badge badge-default">—</span>
   <span id="created-at"></span>
+</div>
+
+<div id="attack-banner">
+  <div class="attack-banner-inner">
+    <span class="attack-label">Attack injected</span>
+    <code class="attack-cmd" id="attack-cmd-text"></code>
+  </div>
 </div>
 
 <div id="loading">Loading replay…</div>
@@ -249,7 +321,22 @@
 </div>
 
 <script>
-const INCIDENT_ID = "__INCIDENT_ID__";
+const urlParams = new URLSearchParams(window.location.search);
+const INCIDENT_ID = urlParams.get('id') || "";
+
+const ATTACK_CMDS = {
+  "demo-app CPU high":             "stress-ng --cpu 4 --timeout 30s",
+  "demo-app service down":         "pkill -9 nginx",
+  "demo-app OOM":                  "stress-ng --vm 1 --vm-bytes 90% --timeout 20s",
+  "demo-app disk full":            "fallocate -l 50M /var/log/nginx/junk.log",
+  "CPU Temperature":               "sensor: CPU 92°C (simulated)",
+  "demo-app high latency":         "tc qdisc add dev eth0 root netem delay 800ms",
+  "demo-app log error rate spike": "yes ERROR >> /var/log/nginx/error.log",
+  "demo-app FD exhausted":         "for i in {1..100}; do exec 200>/tmp/fd$i; done",
+  "demo-app zombie processes":     "for i in {1..200}; do (sleep 0; exit) & done",
+  "demo-app DNS resolution failing":"echo 'nameserver 0.0.0.0' > /etc/resolv.conf",
+  "demo-app disk I/O degraded":    "stress-ng --io 4 --timeout 25s",
+};
 
 function fmtTime(t_seconds) {
   if (t_seconds < 60) return `T+${t_seconds}s`;
@@ -267,9 +354,10 @@ function fmtDuration(ms) {
 function fmtDate(iso) {
   if (!iso) return "";
   try {
-    return new Date(iso).toLocaleString(undefined, {
+    return new Date(iso + 'Z').toLocaleString(undefined, {
       year: "numeric", month: "short", day: "numeric",
-      hour: "2-digit", minute: "2-digit", second: "2-digit"
+      hour: "2-digit", minute: "2-digit", second: "2-digit",
+      timeZone: "Asia/Kolkata"
     });
   } catch { return iso; }
 }
@@ -305,15 +393,20 @@ function renderStep(step, idx) {
   // Lifecycle events (_event rows) render as a slim banner, not a full card.
   if (step.tool === "_event") {
     const eventName = (step.input && step.input.event) || "event";
-    const detail = step.output ? JSON.stringify(step.output) : "";
+    const isRunbook = eventName === "runbook_matched";
+    const runbookPreview = isRunbook && step.output && step.output.runbook_preview
+      ? step.output.runbook_preview : "";
+    const detail = (!isRunbook && step.output) ? JSON.stringify(step.output) : "";
     const el = document.createElement("div");
     el.className = "step";
     el.innerHTML = `
       <div class="step-time">${fmtTime(step.t_seconds)}</div>
       <div class="step-dot dot-info"></div>
-      <div class="step-card step-event">
+      <div class="step-card step-event ${isRunbook ? "step-runbook" : ""}">
         <span class="step-tool">${escHtml(eventName.replace(/_/g, " "))}</span>
-        ${detail ? `<span class="step-event-detail">${escHtml(detail)}</span>` : ""}
+        ${isRunbook && runbookPreview
+          ? `<div class="step-runbook-preview">${escHtml(runbookPreview)}</div>`
+          : detail ? `<span class="step-event-detail">${escHtml(detail)}</span>` : ""}
       </div>
     `;
     return el;
@@ -382,6 +475,13 @@ async function load() {
     badge.className = `badge ${badgeClass(data.status)}`;
     document.getElementById("created-at").textContent = fmtDate(data.created_at);
 
+    // Attack banner
+    const cmd = ATTACK_CMDS[data.alert_name];
+    if (cmd) {
+      document.getElementById("attack-cmd-text").textContent = cmd;
+      document.getElementById("attack-banner").classList.add("visible");
+    }
+
     // Timeline
     if (!data.timeline || data.timeline.length === 0) {
       wrap.innerHTML = '<p style="color:#64748b;text-align:center;padding:40px 0">No actions recorded yet.</p>';
@@ -405,7 +505,36 @@ async function load() {
   }
 }
 
+let refreshInterval = null;
+
+function startAutoRefresh() {
+  refreshInterval = setInterval(async () => {
+    const res = await fetch(`/incidents/${INCIDENT_ID}/replay`);
+    if (!res.ok) return;
+    const data = await res.json();
+
+    // Stop polling once resolved or escalated
+    if (data.status === "resolved" || data.status === "escalated") {
+      clearInterval(refreshInterval);
+    }
+
+    // Re-render (simplified: clear and reload)
+    document.getElementById("timeline-wrap").innerHTML = "";
+    if (data.timeline && data.timeline.length > 0) {
+      data.timeline.forEach((step, idx) => {
+        document.getElementById("timeline-wrap").appendChild(renderStep(step, idx));
+      });
+    }
+
+    // Update badge
+    const badge = document.getElementById("status-badge");
+    badge.textContent = (data.status || "unknown").replace(/_/g, " ");
+    badge.className = `badge ${badgeClass(data.status)}`;
+  }, 2000);
+}
+
 load();
+startAutoRefresh();
 </script>
 </body>
 </html>

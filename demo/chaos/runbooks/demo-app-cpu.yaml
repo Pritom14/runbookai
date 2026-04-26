@@ -1,0 +1,2 @@
+alert_pattern: 'demo-app CPU'
+content: "Step 1: Run query_metrics on host web-01 to get current CPU. Step 2: Run check_processes on host web-01 to find stress-ng. Step 3: If stress-ng found, ssh_execute on host web-01: pkill stress-ng. Step 4: http_check on http://localhost:8080 to verify. Step 5: finish() with summary."

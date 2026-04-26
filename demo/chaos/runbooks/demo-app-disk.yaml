@@ -1,0 +1,2 @@
+alert_pattern: 'demo-app disk full'
+content: "Step 1: check_disk on host web-01. Step 2: ssh_execute on host web-01: find /var/log/nginx -name junk\* -delete. Step 3: check_disk again. Step 4: finish() with summary."

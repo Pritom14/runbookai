@@ -1,0 +1,2 @@
+alert_pattern: 'demo-app log error rate'
+content: "Step 1: check_logs on host web-01 for nginx errors. Step 2: ssh_execute on host web-01: pkill -f 'yes ERROR'. Step 3: ssh_execute on host web-01: truncate -s 0 /var/log/nginx/error.log. Step 4: finish() with summary."

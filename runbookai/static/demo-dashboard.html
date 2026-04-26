@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RunbookAI — Chaos Demo</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+
+    /* ── Header bar ── */
+    #header {
+      background: #1a1d27;
+      border-bottom: 1px solid #2d3148;
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    #header-title {
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: #f8fafc;
+    }
+
+    .health-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .health-pill.up {
+      background: #064e3b;
+      color: #34d399;
+      border: 1px solid #065f46;
+    }
+
+    .health-pill.down {
+      background: #450a0a;
+      color: #f87171;
+      border: 1px solid #7f1d1d;
+    }
+
+    .health-pill::before {
+      content: "";
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    /* ── Container info bar ── */
+    #container-info {
+      background: #0f1117;
+      border-bottom: 1px solid #2d3148;
+      padding: 12px 32px;
+      font-size: 0.8rem;
+      color: #64748b;
+      font-family: "SF Mono", "Fira Code", Menlo, monospace;
+    }
+
+    /* ── Stats row ── */
+    #stats-row {
+      background: #0f1117;
+      border-bottom: 1px solid #2d3148;
+      padding: 12px 32px;
+      display: flex;
+      gap: 32px;
+      font-size: 0.8rem;
+    }
+
+    .stat-item {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .stat-label {
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-size: 0.7rem;
+      font-weight: 700;
+    }
+
+    .stat-value {
+      color: #e2e8f0;
+      font-size: 1rem;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ── Incidents container ── */
+    #incidents-container {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 24px 32px;
+    }
+
+    #incidents-container.empty {
+      text-align: center;
+      color: #64748b;
+      padding: 80px 32px;
+    }
+
+    /* ── Incident card ── */
+    .incident-card {
+      background: #1a1d27;
+      border: 1px solid #2d3148;
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin-bottom: 16px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 16px;
+    }
+
+    .incident-left {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .incident-name {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #f8fafc;
+    }
+
+    .incident-meta {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .badge-resolved {
+      background: #064e3b;
+      color: #34d399;
+      border: 1px solid #065f46;
+    }
+
+    .badge-firing {
+      background: #450a0a;
+      color: #f87171;
+      border: 1px solid #7f1d1d;
+    }
+
+    .badge-pending {
+      background: #450a0a;
+      color: #f87171;
+      border: 1px solid #7f1d1d;
+    }
+
+    .badge-in_progress {
+      background: #450a0a;
+      color: #f87171;
+      border: 1px solid #7f1d1d;
+    }
+
+    .badge-waiting_approval {
+      background: #451a03;
+      color: #fbbf24;
+      border: 1px solid #78350f;
+    }
+
+    .badge-escalated {
+      background: #3e2c71;
+      color: #c4b5fd;
+      border: 1px solid #5b4a8a;
+    }
+
+    .duration {
+      background: #0f172a;
+      color: #94a3b8;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 0.75rem;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      font-family: "SF Mono", "Fira Code", Menlo, monospace;
+    }
+
+    .timestamps {
+      display: flex;
+      gap: 16px;
+      font-size: 0.75rem;
+      color: #64748b;
+      flex-wrap: wrap;
+    }
+
+    .timestamp-item {
+      display: flex;
+      gap: 4px;
+    }
+
+    .timestamp-label {
+      color: #475569;
+    }
+
+    .attack-cmd {
+      background: #0f172a;
+      color: #94a3b8;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 0.75rem;
+      font-family: "SF Mono", "Fira Code", Menlo, monospace;
+      max-width: 100%;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+
+    .incident-right {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      justify-content: flex-start;
+      align-items: flex-end;
+    }
+
+    .view-replay {
+      color: #3b82f6;
+      text-decoration: none;
+      font-size: 0.8rem;
+      font-weight: 500;
+      padding: 6px 10px;
+      border: 1px solid #1e40af;
+      border-radius: 6px;
+      background: rgba(59, 130, 246, 0.05);
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .view-replay:hover {
+      background: rgba(59, 130, 246, 0.1);
+      border-color: #3b82f6;
+      color: #60a5fa;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 768px) {
+      .incident-card {
+        grid-template-columns: 1fr;
+      }
+
+      .incident-right {
+        align-items: flex-start;
+      }
+
+      #incidents-container {
+        padding: 16px 16px;
+      }
+
+      #header {
+        padding: 12px 16px;
+      }
+
+      #container-info,
+      #stats-row {
+        padding: 12px 16px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<div id="header">
+  <div id="header-title">RunbookAI — Chaos Demo</div>
+  <div id="health-pill" class="health-pill down">Server :7000 Down</div>
+</div>
+
+<div id="container-info">demo-app | SSH :2222 | HTTP :8080 | nginx</div>
+
+<div id="stats-row">
+  <div class="stat-item">
+    <div class="stat-label">Total Incidents</div>
+    <div id="stat-total" class="stat-value">0</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-label">Resolved</div>
+    <div id="stat-resolved" class="stat-value">0</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-label">Firing</div>
+    <div id="stat-firing" class="stat-value">0</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-label">Escalated</div>
+    <div id="stat-escalated" class="stat-value">0</div>
+  </div>
+</div>
+
+<div id="incidents-container" class="empty">
+  <div>No incidents yet. Server is initializing...</div>
+</div>
+
+<script>
+const ATTACK_CMDS = {
+  "demo-app CPU high":            "stress-ng --cpu 4 --timeout 30s",
+  "demo-app service down":        "pkill -9 nginx",
+  "demo-app OOM":                 "stress-ng --vm 1 --vm-bytes 90% --timeout 20s",
+  "demo-app disk full":           "fallocate -l 50M /var/log/nginx/junk.log",
+  "CPU Temperature":              "sensor: CPU 92°C (simulated)",
+  "demo-app high latency":        "tc qdisc add dev eth0 root netem delay 800ms",
+  "demo-app log error rate spike":"yes ERROR >> /var/log/nginx/error.log",
+  "demo-app FD exhausted":        "for i in {1..100}; do exec 200>/tmp/fd$i; done",
+  "demo-app zombie processes":    "for i in {1..200}; do (sleep 0; exit) & done",
+  "demo-app DNS resolution failing":"echo 'nameserver 0.0.0.0' > /etc/resolv.conf",
+  "demo-app disk I/O degraded":   "stress-ng --io 4 --timeout 25s",
+};
+
+let lastIncidents = [];
+let refreshInterval = null;
+
+function formatTime(isoString) {
+  try {
+    const date = new Date(isoString + 'Z');
+    return date.toLocaleTimeString(undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      timeZone: "Asia/Kolkata"
+    });
+  } catch {
+    return "";
+  }
+}
+
+function formatDuration(startIso, endIso) {
+  try {
+    const start = new Date(startIso);
+    const end = endIso ? new Date(endIso) : new Date();
+    const ms = end - start;
+    const secs = Math.floor(ms / 1000);
+    if (secs < 60) return `${secs}s`;
+    const mins = Math.floor(secs / 60);
+    const remainSecs = secs % 60;
+    return remainSecs > 0 ? `${mins}m${remainSecs}s` : `${mins}m`;
+  } catch {
+    return "";
+  }
+}
+
+function getBadgeClass(status) {
+  const s = (status || "pending").toLowerCase();
+  if (s === "resolved") return "badge-resolved";
+  if (s === "escalated") return "badge-escalated";
+  if (s === "waiting_approval") return "badge-waiting_approval";
+  if (s === "in_progress") return "badge-in_progress";
+  if (s === "pending") return "badge-pending";
+  return "badge-pending";
+}
+
+function getStatusDisplay(status) {
+  if (!status) return "pending";
+  const s = status.toLowerCase();
+  if (s === "waiting_approval") return "waiting approval";
+  if (s === "in_progress") return "in progress";
+  return s;
+}
+
+function renderIncident(incident) {
+  const card = document.createElement("div");
+  card.className = "incident-card";
+
+  const statusDisplay = getStatusDisplay(incident.status);
+  const badgeClass = getBadgeClass(incident.status);
+  const duration = formatDuration(incident.created_at, incident.resolved_at);
+  const startTime = formatTime(incident.created_at);
+  const endTime = incident.resolved_at ? formatTime(incident.resolved_at) : "";
+  const attackCmd = ATTACK_CMDS[incident.alert_name] || "(no command mapping)";
+
+  card.innerHTML = `
+    <div class="incident-left">
+      <div class="incident-name">${escapeHtml(incident.alert_name || "Unknown Alert")}</div>
+      <div class="incident-meta">
+        <span class="badge ${badgeClass}">${statusDisplay}</span>
+        <span class="duration">${escapeHtml(duration)}</span>
+      </div>
+      <div class="timestamps">
+        <div class="timestamp-item">
+          <span class="timestamp-label">Started</span>
+          <span>${escapeHtml(startTime)}</span>
+        </div>
+        ${endTime ? `
+          <div class="timestamp-item">
+            <span class="timestamp-label">Resolved</span>
+            <span>${escapeHtml(endTime)}</span>
+          </div>
+        ` : `
+          <div class="timestamp-item">
+            <span class="timestamp-label">Resolved</span>
+            <span>—</span>
+          </div>
+        `}
+      </div>
+      <div class="attack-cmd">${escapeHtml(attackCmd)}</div>
+    </div>
+    <div class="incident-right">
+      <a href="/static/replay.html?id=${escapeHtml(incident.id)}" class="view-replay">View Replay →</a>
+    </div>
+  `;
+
+  return card;
+}
+
+function escapeHtml(text) {
+  const map = {
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#039;"
+  };
+  return String(text).replace(/[&<>"']/g, m => map[m]);
+}
+
+function updateStats(incidents) {
+  const total = incidents.length;
+  const resolved = incidents.filter(i => i.status === "resolved").length;
+  const firing = incidents.filter(i =>
+    ["pending", "in_progress", "waiting_approval"].includes((i.status || "pending").toLowerCase())
+  ).length;
+  const escalated = incidents.filter(i => i.status === "escalated").length;
+
+  document.getElementById("stat-total").textContent = total;
+  document.getElementById("stat-resolved").textContent = resolved;
+  document.getElementById("stat-firing").textContent = firing;
+  document.getElementById("stat-escalated").textContent = escalated;
+}
+
+async function fetchIncidents() {
+  try {
+    const response = await fetch("/incidents");
+    if (!response.ok) {
+      updateHealthPill(false);
+      return;
+    }
+
+    const data = await response.json();
+    updateHealthPill(true);
+
+    const incidents = data.incidents || [];
+    incidents.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+    updateStats(incidents);
+    renderIncidents(incidents);
+    lastIncidents = incidents;
+  } catch (err) {
+    updateHealthPill(false);
+    console.error("Failed to fetch incidents:", err);
+  }
+}
+
+function updateHealthPill(isUp) {
+  const pill = document.getElementById("health-pill");
+  if (isUp) {
+    pill.textContent = "Server :7000 Up";
+    pill.className = "health-pill up";
+  } else {
+    pill.textContent = "Server :7000 Down";
+    pill.className = "health-pill down";
+  }
+}
+
+function renderIncidents(incidents) {
+  const container = document.getElementById("incidents-container");
+
+  if (incidents.length === 0) {
+    container.className = "empty";
+    container.innerHTML = "<div>No incidents yet. Waiting for chaos...</div>";
+    return;
+  }
+
+  container.className = "";
+  container.innerHTML = "";
+
+  incidents.forEach(incident => {
+    container.appendChild(renderIncident(incident));
+  });
+}
+
+function startAutoRefresh() {
+  fetchIncidents();
+  refreshInterval = setInterval(fetchIncidents, 2500);
+}
+
+startAutoRefresh();
+</script>
+</body>
+</html>

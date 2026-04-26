@@ -29,7 +29,7 @@ import json
 import logging
 import uuid
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Optional
 
 import openai
 
@@ -49,11 +49,18 @@ logger = logging.getLogger("runbookai.suggest_mode")
 RESOLVED = object()
 
 _SYSTEM_PROMPT = """\
-You are RunbookAI, an autonomous incident-response agent. You follow the
-provided runbook step-by-step. Think carefully before acting.
+You are RunbookAI, an autonomous incident-response agent. Use your reasoning
+and available tools to diagnose and remediate incidents effectively.
 
 Rules:
-- Diagnose before remediating. Start with check_logs or http_check.
+- Think strategically: analyze the alert, examine available tools, and reason
+  about the best diagnostic and remediation approach.
+- Diagnose before remediating. Start with check_logs or http_check to understand
+  the root cause.
+- If a runbook is provided, use it as guidance (not a mandatory requirement).
+  Trust your analysis if it suggests a better path.
+- If similar past experiences are provided, learn from them but adapt to the
+  current incident's unique context.
 - When the incident is resolved (or you are certain human escalation is the
   right next step), call finish() with a clear summary.
 - Never repeat a tool call that already succeeded.
@@ -146,7 +153,7 @@ class SuggestModeAgent:
             model=settings.llm_model,
             messages=[{"role": "system", "content": _SYSTEM_PROMPT}] + self.messages,
             tools=TOOL_SCHEMAS_OPENAI,
-            tool_choice="required",
+            tool_choice="auto",
             max_tokens=4096,
         )
 
@@ -176,24 +183,50 @@ class SuggestModeAgent:
 
         finish_reason = choice.finish_reason
 
-        if finish_reason == "stop" or not message.tool_calls:
-            # Model finished without calling a tool — treat as unresolved.
+        tool_name: str = ""
+        tool_input: dict[str, Any] = {}
+        tool_use_id: str = ""
+        rationale: str = message.content.strip() if message.content else "No rationale provided."
+
+        # Try structured tool_calls first (OpenAI/Anthropic format).
+        if message.tool_calls:
+            tc = message.tool_calls[0]
+            tool_name = tc.function.name
+            tool_use_id = tc.id
+            try:
+                tool_input = json.loads(tc.function.arguments)
+            except json.JSONDecodeError:
+                tool_input = {}
+        # Fallback: try to parse tool call as JSON in content (Ollama workaround).
+        elif message.content:
+            try:
+                # Strip markdown code block formatting if present.
+                content = message.content.strip()
+                if content.startswith("```"):
+                    # Remove ```json or ``` at start and ``` at end
+                    content = content.replace("```json\n", "").replace("```", "").strip()
+
+                tool_json = json.loads(content)
+                if isinstance(tool_json, dict) and "name" in tool_json:
+                    tool_name = tool_json["name"]
+                    tool_input = tool_json.get("arguments", {})
+                    tool_use_id = str(uuid.uuid4())  # Generate ID for fallback case.
+                    logger.info(
+                        "incident=%s parsed tool call from content fallback: %s",
+                        self.incident_id,
+                        tool_name,
+                    )
+            except (json.JSONDecodeError, KeyError, AttributeError):
+                pass
+
+        # If still no tool found, return RESOLVED (end of conversation).
+        if not tool_name:
             logger.warning(
-                "incident=%s LLM returned finish_reason=%s without tool call",
+                "incident=%s LLM returned finish_reason=%s without calling tools",
                 self.incident_id,
                 finish_reason,
             )
             return RESOLVED
-
-        # Extract the first tool call (OpenAI format).
-        tc = message.tool_calls[0]
-        tool_name: str = tc.function.name
-        try:
-            tool_input: dict[str, Any] = json.loads(tc.function.arguments)
-        except json.JSONDecodeError:
-            tool_input = {}
-
-        rationale: str = message.content.strip() if message.content else "No rationale provided."
 
         logger.info(
             "incident=%s proposed tool=%s input=%s",
@@ -205,7 +238,7 @@ class SuggestModeAgent:
         if tool_name == "finish":
             # Record the finish call and signal resolution to harness.
             await self._append_tool_result(
-                tc.id,
+                tool_use_id,
                 tool_name,
                 tool_input,
                 {"status": "ok"},
@@ -216,7 +249,7 @@ class SuggestModeAgent:
             tool_name=tool_name,
             tool_input=tool_input,
             rationale=rationale,
-            tool_use_id=tc.id,
+            tool_use_id=tool_use_id,
             is_high_risk=tool_name in HIGH_RISK_TOOLS,
         )
 
@@ -297,7 +330,7 @@ class SuggestModeAgent:
           3. Execute via TOOL_REGISTRY with trace recording.
           4. Append tool result to messages so the loop can continue.
         """
-        row: ApprovalRequest | None = await self.session.get(ApprovalRequest, approval_id)
+        row: Optional[ApprovalRequest] = await self.session.get(ApprovalRequest, approval_id)
         if row is None:
             raise ValueError(f"ApprovalRequest {approval_id} not found")
         if row.status != ApprovalStatus.APPROVED:
@@ -363,6 +396,7 @@ def _build_initial_message(context: dict[str, Any]) -> str:
     alert = context.get("alert", {})
     runbook = context.get("runbook", "No runbook found.")
     previous = context.get("previous_actions", [])
+    experiences = context.get("experiences", [])  # Phase 2A: retrieve experiences
 
     lines = [
         "## Incident Alert",
@@ -370,8 +404,24 @@ def _build_initial_message(context: dict[str, Any]) -> str:
         f"Service: {alert.get('service', 'unknown')}",
         f"Severity: {alert.get('severity', 'unknown')}",
         f"Details: {alert.get('details', '')}",
+    ]
+
+    # Phase 2A: Inject similar experiences as soft guidance
+    if experiences:
+        lines += [
+            "",
+            "## Similar Past Experiences (for reference)",
+        ]
+        for exp in experiences[:3]:  # Limit to top 3 for clarity
+            lines.append(f"- Context: {exp.context[:100]}")
+            lines.append(f"  Action: {exp.action}")
+            lines.append(f"  Outcome: {exp.outcome}")
+            lines.append(f"  Success: {exp.success}, Confidence: {exp.confidence}")
+
+    # Phase 2B: Runbook is optional guidance, not mandatory
+    lines += [
         "",
-        "## Runbook",
+        "## Runbook (optional guidance)",
         runbook,
     ]
 
@@ -386,7 +436,7 @@ def _build_initial_message(context: dict[str, Any]) -> str:
     if regression:
         lines += [
             "",
-            "## ⚠ POSSIBLE REGRESSION DETECTED",
+            "## POSSIBLE REGRESSION DETECTED",
             f"This service was remediated {regression.get('minutes_ago', '?')} minutes ago "
             f"(incident {regression.get('prior_incident_id', '?')}).",
             f"Prior resolution: {regression.get('prior_summary', 'unknown')}",
@@ -398,6 +448,6 @@ def _build_initial_message(context: dict[str, Any]) -> str:
 
     lines += [
         "",
-        "Diagnose and remediate following the runbook. Call finish() when done.",
+        "Diagnose and remediate using your reasoning and available tools. Call finish() when done.",
     ]
     return "\n".join(lines)

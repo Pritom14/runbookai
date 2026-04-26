@@ -1,0 +1,2 @@
+alert_pattern: 'demo-app OOM'
+content: "Step 1: check_processes on host web-01. Step 2: ssh_execute on host web-01: pkill stress-ng. Step 3: query_metrics on host web-01. Step 4: finish() with summary."

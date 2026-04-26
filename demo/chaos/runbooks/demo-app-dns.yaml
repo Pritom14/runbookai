@@ -1,0 +1,2 @@
+alert_pattern: 'demo-app DNS'
+content: "Step 1: ssh_execute on host web-01: echo 'nameserver 8.8.8.8' > /etc/resolv.conf. Step 2: http_check http://localhost:8080. Step 3: finish() with summary."

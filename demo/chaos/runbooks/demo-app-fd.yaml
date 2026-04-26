@@ -1,0 +1,2 @@
+alert_pattern: 'demo-app FD exhausted'
+content: "Step 1: check_processes on host web-01. Step 2: ssh_execute on host web-01: pkill -f bash (kill the fd holder process). Step 3: finish() with summary."

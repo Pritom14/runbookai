@@ -32,13 +32,21 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from pathlib import Path
+from typing import Any, Optional
 
 from runbookai.agent.suggest_mode import RESOLVED, SuggestModeAgent
 from runbookai.config import settings
 from runbookai.models import IncidentStatus
 from runbookai.slack import send_slack_notification
 from runbookai.trace.recorder import AgentTraceRecorder
+
+# Import ExperienceStore for Phase 2A
+try:
+    from soma_memory.experience import ExperienceStore
+    _SOMA_AVAILABLE = True
+except ImportError:
+    _SOMA_AVAILABLE = False
 
 logger = logging.getLogger("runbookai.harness")
 
@@ -53,7 +61,7 @@ class IncidentResult:
     resolved: bool
     summary: str
     actions_taken: list[dict[str, Any]] = field(default_factory=list)
-    escalation_reason: str | None = None
+    escalation_reason: Optional[str] = None
 
 
 class AgentHarness:
@@ -79,7 +87,7 @@ class AgentHarness:
     def __init__(
         self,
         incident_id: str,
-        suggest_mode: bool | None = None,
+        suggest_mode: Optional[bool] = None,
     ) -> None:
         self.incident_id = incident_id
         # Default to global setting if not explicitly overridden.
@@ -105,7 +113,35 @@ class AgentHarness:
 
         recorder = AgentTraceRecorder(session, self.incident_id)
 
-        # Fetch the matching runbook.
+        # Phase 2A: Retrieve similar past experiences from soma-memory.
+        similar_experiences = []
+        if _SOMA_AVAILABLE:
+            try:
+                store = ExperienceStore()
+                # Query using alert name and service as context for similarity search
+                query_context = f"{incident.alert_name} {alert_context.get('service', 'unknown')}"
+                similar_experiences = store.find_similar(
+                    context=query_context,
+                    domain="incident_response",
+                    limit=3
+                )
+                if similar_experiences:
+                    await recorder.log_event(
+                        "experiences_retrieved",
+                        {
+                            "count": len(similar_experiences),
+                            "experience_ids": [e.id for e in similar_experiences],
+                        },
+                    )
+                    logger.info(
+                        "incident=%s retrieved %d similar experiences",
+                        self.incident_id,
+                        len(similar_experiences),
+                    )
+            except Exception as e:
+                logger.warning("failed to retrieve experiences from soma-memory: %s", e)
+
+        # Fetch the matching runbook (optional in Phase 2B).
         runbook_text = await self._load_runbook(incident.alert_name, session=session)
         await recorder.log_event(
             "runbook_matched",
@@ -117,6 +153,7 @@ class AgentHarness:
             "alert": alert_context,
             "runbook": runbook_text,
             "previous_actions": [],
+            "experiences": similar_experiences,  # Phase 2A: inject experiences
         }
 
         # Inject regression context if this incident was flagged.
@@ -317,7 +354,7 @@ class AgentHarness:
         return _DEFAULT_RUNBOOK
 
     async def _escalate(
-        self, session: Any, incident: Any, reason: str, recorder: AgentTraceRecorder | None = None
+        self, session: Any, incident: Any, reason: str, recorder: Optional[AgentTraceRecorder] = None
     ) -> None:
         """Mark incident as escalated and send an email notification if configured."""
         incident.status = IncidentStatus.ESCALATED
