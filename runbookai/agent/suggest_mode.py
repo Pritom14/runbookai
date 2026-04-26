@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Optional
@@ -209,12 +210,16 @@ class SuggestModeAgent:
                 tool_json = json.loads(content)
                 if isinstance(tool_json, dict) and "name" in tool_json:
                     tool_name = tool_json["name"]
+                    # Normalize camelCase to snake_case (Ollama often uses camelCase).
+                    tool_name = re.sub(r"(?<!^)(?=[A-Z])", "_", tool_name).lower()
+
                     tool_input = tool_json.get("arguments", {})
                     tool_use_id = str(uuid.uuid4())  # Generate ID for fallback case.
                     logger.info(
-                        "incident=%s parsed tool call from content fallback: %s",
+                        "incident=%s parsed tool call from content fallback: %s (normalized from %s)",
                         self.incident_id,
                         tool_name,
+                        tool_json["name"],
                     )
             except (json.JSONDecodeError, KeyError, AttributeError):
                 pass

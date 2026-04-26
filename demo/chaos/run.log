@@ -27,3 +27,6 @@
 2026-04-26 20:49:16,230 - INFO - Starting attack: DNS broken
 2026-04-26 20:50:16,790 - INFO - Starting attack: Slow disk I/O
 2026-04-26 20:51:42,376 - INFO - Starting attack: Repeat process kill
+2026-04-26 23:26:20,910 - INFO - Starting attack: CPU spike
+2026-04-26 23:28:37,397 - INFO - Starting attack: CPU spike
+2026-04-26 23:31:24,788 - INFO - Starting attack: CPU spike

@@ -126,11 +126,20 @@ class AgentHarness:
                     limit=3
                 )
                 if similar_experiences:
+                    experience_summaries = [
+                        {
+                            "id": e.id,
+                            "action": e.action,
+                            "success": e.success,
+                            "confidence": e.confidence,
+                        }
+                        for e in similar_experiences
+                    ]
                     await recorder.log_event(
-                        "experiences_retrieved",
+                        "used_past_experience",
                         {
                             "count": len(similar_experiences),
-                            "experience_ids": [e.id for e in similar_experiences],
+                            "experiences": experience_summaries,
                         },
                     )
                     logger.info(
@@ -204,6 +213,16 @@ class AgentHarness:
                 incident.summary = resolution_summary
                 await session.commit()
                 await recorder.log_event("resolved", {"step": step + 1})
+
+                # Phase 2C: Write-back loop — record incident as experience for future learning.
+                await self._record_experience(
+                    session,
+                    recorder,
+                    incident,
+                    actions_taken,
+                    success=True,
+                )
+
                 await send_slack_notification("incident_resolved", incident)
                 _ACTIVE_AGENTS.pop(self.incident_id, None)
                 logger.info("incident=%s resolved at step %d", self.incident_id, step + 1)
@@ -269,6 +288,16 @@ class AgentHarness:
         # MAX_STEPS exhausted without resolution.
         escalation_reason = f"Reached MAX_STEPS ({self.MAX_STEPS}) without resolving incident."
         await self._escalate(session, incident, escalation_reason, recorder)
+
+        # Phase 2C: Record escalation as failed experience for learning.
+        await self._record_experience(
+            session,
+            recorder,
+            incident,
+            actions_taken,
+            success=False,
+        )
+
         _ACTIVE_AGENTS.pop(self.incident_id, None)
         return IncidentResult(
             incident_id=self.incident_id,
@@ -388,6 +417,71 @@ class AgentHarness:
             logger.warning("escalation_email or smtp_host not set — skipping email")
 
         await send_slack_notification("incident_escalated", incident, {"reason": reason})
+
+    async def _record_experience(
+        self,
+        session: Any,
+        recorder: AgentTraceRecorder,
+        incident: Any,
+        actions_taken: list[dict[str, Any]],
+        success: bool,
+    ) -> None:
+        """Phase 2C: Record incident resolution (or failure) to soma-memory.
+
+        After every incident (resolved or escalated), write an experience entry
+        so the agent learns from production. Over time, repeated patterns
+        crystallize into beliefs.
+        """
+        if not _SOMA_AVAILABLE:
+            logger.info("incident=%s soma-memory not available, skipping experience record", self.incident_id)
+            return
+
+        try:
+            from soma_memory.experience import ExperienceStore
+
+            store = ExperienceStore()
+
+            # Build context: alert name + service + severity for similarity search.
+            context = f"{incident.alert_name}"
+            if incident.alert_body.get("service"):
+                context += f" service={incident.alert_body['service']}"
+            if incident.alert_body.get("severity"):
+                context += f" severity={incident.alert_body['severity']}"
+
+            # Build action summary: tool sequence that was taken.
+            action_sequence = " → ".join(
+                [a["tool_name"] for a in actions_taken if a["tool_name"] != "_event"]
+            )
+            if not action_sequence:
+                action_sequence = "no tools called"
+
+            # Store the experience.
+            store.record(
+                domain="incident_response",
+                context=context,
+                action=action_sequence,
+                outcome=incident.summary or "No summary recorded",
+                success=success,
+                model_used=settings.llm_model,
+                notes=f"incident_id={incident.id} steps={len(actions_taken)}",
+            )
+
+            await recorder.log_event(
+                "experience_saved",
+                {
+                    "context": context,
+                    "action_sequence": action_sequence,
+                    "success": success,
+                },
+            )
+            logger.info(
+                "incident=%s recorded experience: success=%s actions=%s",
+                self.incident_id,
+                success,
+                action_sequence,
+            )
+        except Exception as e:
+            logger.warning("incident=%s failed to record experience: %s", self.incident_id, e)
 
 
 # ---------------------------------------------------------------------------
