@@ -21,6 +21,12 @@ class Settings(BaseSettings):
     ssh_private_key_path: str = ""  # path to PEM file, e.g. ~/.ssh/id_rsa
     # Demo mode — returns pre-canned responses; no real SSH connections made.
     demo_mode: bool = False
+    # Hardware mode: "emulated" (in-memory sensors) or "real" (IPMI BMC calls)
+    hardware_mode: str = "emulated"
+    # BMC configuration for real hardware mode
+    bmc_ip: str = ""  # IP address of BMC, e.g. 10.0.0.50
+    bmc_username: str = ""  # BMC username
+    bmc_password: str = ""  # BMC password
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 
