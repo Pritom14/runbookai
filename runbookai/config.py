@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     llm_model: str = "qwen2.5:7b"
     llm_api_key: str = "ollama"  # "ollama" for Ollama; real key for OpenAI/Anthropic/Groq
     pagerduty_webhook_secret: str = ""
+    pagerduty_api_key: str = ""  # API key for PagerDuty write-back (resolve incidents)
     database_url: str = "sqlite+aiosqlite:///./runbookai.db"
     suggest_mode: bool = True  # False = autonomous execution
     smtp_host: str = ""

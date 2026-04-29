@@ -214,6 +214,9 @@ class AgentHarness:
                 await session.commit()
                 await recorder.log_event("resolved", {"step": step + 1})
 
+                # Write back to PagerDuty if this incident came from PagerDuty
+                await self._writeback_pagerduty(session, incident, resolution_summary, recorder)
+
                 # Phase 2C: Write-back loop — record incident as experience for future learning.
                 await self._record_experience(
                     session,
@@ -498,6 +501,84 @@ class AgentHarness:
             )
         except Exception as e:
             logger.warning("incident=%s failed to record experience: %s", self.incident_id, e)
+
+    async def _writeback_pagerduty(
+        self,
+        session: Any,
+        incident: Any,
+        resolution_summary: str,
+        recorder: Optional[AgentTraceRecorder] = None,
+    ) -> None:
+        """Write back incident resolution to PagerDuty API if applicable.
+
+        Only writes back if:
+        1. incident.source == "pagerduty"
+        2. PAGERDUTY_API_KEY is configured
+        3. The incident's alert_body contains a PagerDuty incident ID
+
+        Logs success/failure to audit trail.
+        """
+        if incident.source != "pagerduty":
+            return
+
+        if not settings.pagerduty_api_key:
+            logger.warning("incident=%s PAGERDUTY_API_KEY not configured", self.incident_id)
+            return
+
+        # Extract incident ID from alert_body
+        # PagerDuty v3 webhook puts it in event.data.incident.id
+        alert_body = incident.alert_body or {}
+        event = alert_body.get("event", {})
+        data = event.get("data", {})
+        incident_data = data.get("incident", alert_body)
+        pd_incident_id = incident_data.get("id")
+
+        if not pd_incident_id:
+            logger.warning(
+                "incident=%s PagerDuty incident ID not found in alert body",
+                self.incident_id,
+            )
+            return
+
+        # Call PagerDuty API to resolve the incident
+        from runbookai.integrations.pagerduty import resolve_incident
+
+        pd_result = await resolve_incident(
+            pd_incident_id,
+            settings.pagerduty_api_key,
+            resolution_summary=resolution_summary,
+        )
+
+        if pd_result["success"]:
+            logger.info(
+                "incident=%s PagerDuty write-back successful: %s",
+                self.incident_id,
+                pd_result["message"],
+            )
+            if recorder:
+                await recorder.log_event(
+                    "pagerduty_writeback",
+                    {
+                        "pd_incident_id": pd_incident_id,
+                        "status": "success",
+                        "message": pd_result["message"],
+                    },
+                )
+        else:
+            logger.error(
+                "incident=%s PagerDuty write-back failed: %s",
+                self.incident_id,
+                pd_result["message"],
+            )
+            if recorder:
+                await recorder.log_event(
+                    "pagerduty_writeback",
+                    {
+                        "pd_incident_id": pd_incident_id,
+                        "status": "failed",
+                        "error": pd_result["message"],
+                    },
+                )
 
     async def _check_thermal_remediation_guard(
         self,
