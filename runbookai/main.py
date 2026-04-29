@@ -9,6 +9,7 @@ from runbookai.api.agents import router as agents_router
 from runbookai.api.analysis import router as analysis_router
 from runbookai.api.approvals import router as approvals_router
 from runbookai.api.bmc import router as bmc_router
+from runbookai.api.brain import router as brain_router
 from runbookai.api.customer_dashboard import router as dashboard_router
 from runbookai.api.customers import router as customers_router
 from runbookai.api.hosts import router as hosts_router
@@ -31,11 +32,12 @@ app.include_router(dashboard_router)
 app.include_router(webhooks_router)
 app.include_router(approvals_router)
 app.include_router(bmc_router)
-# analysis and postmortem must be registered before incidents so
-# /incidents/analysis and /incidents/{id}/postmortem are not captured
+# analysis, postmortem, and brain must be registered before incidents so
+# /incidents/analysis, /incidents/{id}/postmortem, and /brain/incidents/* are not captured
 # by the /incidents/{incident_id} wildcard route.
 app.include_router(analysis_router)
 app.include_router(postmortem_router)
+app.include_router(brain_router)
 app.include_router(incidents_router)
 app.include_router(runbooks_router)
 app.include_router(hosts_router)

@@ -176,3 +176,50 @@ class PendingIncident(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     incident: Mapped["Incident"] = relationship()
+
+
+class Postmortem(Base):
+    """Customer-provided postmortem for an incident.
+
+    Stores structured knowledge extracted from customer postmortem documents.
+    Used to enhance experience memory: root cause, remediation steps, timeline,
+    and lessons learned are parsed and stored for the agent to learn from.
+    """
+
+    __tablename__ = "postmortems"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    incident_id: Mapped[str] = mapped_column(ForeignKey("incidents.id"), index=True)
+    customer_id: Mapped[Optional[str]] = mapped_column(ForeignKey("customers.id"), nullable=True, index=True)
+    markdown_content: Mapped[str] = mapped_column(Text)  # raw markdown uploaded by customer
+    root_cause: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # extracted root cause
+    remediation_steps: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)  # extracted steps
+    timeline: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # structured timeline
+    lessons: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)  # key lessons as strings
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    incident: Mapped["Incident"] = relationship()
+    customer: Mapped[Optional["Customer"]] = relationship()
+
+
+class RunbookVersion(Base):
+    """Track changes to runbooks over time.
+
+    Records when a customer edits a runbook, what changed, and which incident
+    triggered the change. Used to learn: "when pattern Z fires, we now use strategy B
+    because of lessons learned from incident Y".
+    """
+
+    __tablename__ = "runbook_versions"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    runbook_id: Mapped[str] = mapped_column(ForeignKey("runbooks.id"), index=True)
+    version: Mapped[int] = mapped_column(default=1)  # version number
+    content: Mapped[str] = mapped_column(Text)  # full runbook content at this version
+    incident_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)  # incident that prompted this change
+    change_description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # what changed and why
+    previous_content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # previous version for diff
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    runbook: Mapped["Runbook"] = relationship()
