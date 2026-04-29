@@ -217,6 +217,9 @@ class AgentHarness:
                 # Write back to PagerDuty if this incident came from PagerDuty
                 await self._writeback_pagerduty(session, incident, resolution_summary, recorder)
 
+                # Write back to Datadog if this incident came from Datadog
+                await self._writeback_datadog(session, incident, resolution_summary, recorder)
+
                 # Phase 2C: Write-back loop — record incident as experience for future learning.
                 await self._record_experience(
                     session,
@@ -577,6 +580,90 @@ class AgentHarness:
                         "pd_incident_id": pd_incident_id,
                         "status": "failed",
                         "error": pd_result["message"],
+                    },
+                )
+
+    async def _writeback_datadog(
+        self,
+        session: Any,
+        incident: Any,
+        resolution_summary: str,
+        recorder: Optional[AgentTraceRecorder] = None,
+    ) -> None:
+        """Write back incident resolution to Datadog Events API if applicable.
+
+        Only writes back if:
+        1. incident.source == "datadog"
+        2. DATADOG_API_KEY is configured
+        3. The incident's alert_body contains required Datadog data
+
+        Logs success/failure to audit trail.
+        """
+        if incident.source != "datadog":
+            return
+
+        if not settings.datadog_api_key:
+            logger.warning("incident=%s DATADOG_API_KEY not configured", self.incident_id)
+            return
+
+        # Extract monitor ID from alert_body
+        alert_body = incident.alert_body or {}
+        dd_monitor_id = str(alert_body.get("id", ""))
+
+        if not dd_monitor_id:
+            logger.warning(
+                "incident=%s Datadog monitor ID not found in alert body",
+                self.incident_id,
+            )
+            return
+
+        # Post resolution event to Datadog
+        from runbookai.integrations.datadog import post_event
+
+        event_title = f"Incident Resolved: {incident.alert_name}"
+        event_text = f"RunbookAI resolved incident for monitor {dd_monitor_id}.\n\nSummary: {resolution_summary}"
+        tags = [
+            f"runbookai:incident_id:{self.incident_id}",
+            f"datadog:monitor_id:{dd_monitor_id}",
+        ]
+
+        dd_result = await post_event(
+            event_title,
+            settings.datadog_api_key,
+            site=settings.datadog_site or "datadoghq.com",
+            alert_type="success",
+            text=event_text,
+            tags=tags,
+        )
+
+        if dd_result["success"]:
+            logger.info(
+                "incident=%s Datadog write-back successful: %s",
+                self.incident_id,
+                dd_result["message"],
+            )
+            if recorder:
+                await recorder.log_event(
+                    "datadog_writeback",
+                    {
+                        "dd_monitor_id": dd_monitor_id,
+                        "status": "success",
+                        "message": dd_result["message"],
+                    },
+                )
+        else:
+            logger.error(
+                "incident=%s Datadog write-back failed: %s",
+                self.incident_id,
+                dd_result["message"],
+            )
+            if recorder:
+                await recorder.log_event(
+                    "datadog_writeback",
+                    {
+                        "dd_monitor_id": dd_monitor_id,
+                        "status": "failed",
+                        "error": dd_result["message"],
                     },
                 )
 

@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from runbookai.database import AsyncSessionLocal, get_session
 from runbookai.integrations.pagerduty import parse_pagerduty_payload, verify_signature
+from runbookai.integrations.datadog import parse_datadog_payload
 from runbookai.models import AgentAction, Incident, IncidentStatus
 
 logger = logging.getLogger("runbookai.api.webhooks")
@@ -233,4 +234,60 @@ async def hardware_webhook(
         "incident_id": incident.id,
         "possible_regression": is_regression,
         "prior_incident_id": prior_id,
+    }
+
+
+@router.post("/datadog")
+async def datadog_webhook(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    session: AsyncSession = Depends(get_session),
+):
+    """Receive a Datadog monitor webhook, create an Incident, kick off the agent.
+
+    Only processes "alert" status (not "recovery" which is handled by callbacks).
+    """
+    payload = await request.json()
+    normalized = parse_datadog_payload(payload)
+    if not normalized:
+        return {"status": "ignored"}
+
+    # Only create incidents for alert status; recovery is logged but not actioned
+    status = normalized.get("status", "")
+    if status != "alert":
+        logger.info(
+            "Datadog webhook %s for monitor %s — logged but not actioned",
+            status,
+            normalized.get("monitor_id", "unknown"),
+        )
+        return {
+            "status": "logged",
+            "event_type": status,
+            "monitor_id": normalized.get("monitor_id", ""),
+            "message": f"Status '{status}' logged but not actionable",
+        }
+
+    # Create incident for alert status
+    incident = Incident(
+        id=str(uuid.uuid4()),
+        source="datadog",
+        alert_name=normalized["alert_name"],
+        alert_body=payload,
+    )
+    session.add(incident)
+    await session.commit()
+    await session.refresh(incident)
+
+    background_tasks.add_task(run_agent_for_incident, incident.id)
+    logger.info(
+        "Datadog alert received: %s (monitor=%s runbookai_id=%s)",
+        normalized["alert_name"],
+        normalized.get("monitor_id", "?"),
+        incident.id,
+    )
+    return {
+        "status": "accepted",
+        "alert_name": normalized["alert_name"],
+        "incident_id": incident.id,
+        "datadog_monitor_id": normalized.get("monitor_id", ""),
     }
