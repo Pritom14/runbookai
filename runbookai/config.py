@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     bmc_ip: str = ""  # IP address of BMC, e.g. 10.0.0.50
     bmc_username: str = ""  # BMC username
     bmc_password: str = ""  # BMC password
+    # Cloud SaaS (Phase 3)
+    cloud_enabled: bool = False  # Enable managed cloud service features
+    cloud_api_base_url: str = "https://runbookai.cloud"  # Base URL for cloud API
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

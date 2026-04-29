@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from runbookai.api.analysis import router as analysis_router
 from runbookai.api.approvals import router as approvals_router
 from runbookai.api.bmc import router as bmc_router
+from runbookai.api.customers import router as customers_router
 from runbookai.api.hosts import router as hosts_router
 from runbookai.api.incidents import router as incidents_router
 from runbookai.api.postmortem import router as postmortem_router
@@ -22,6 +23,7 @@ app = FastAPI(
     version="0.1.0",
 )
 
+app.include_router(customers_router)
 app.include_router(webhooks_router)
 app.include_router(approvals_router)
 app.include_router(bmc_router)

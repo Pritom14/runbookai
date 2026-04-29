@@ -33,6 +33,7 @@ class Incident(Base):
     __tablename__ = "incidents"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    customer_id: Mapped[Optional[str]] = mapped_column(ForeignKey("customers.id"), nullable=True, index=True)
     source: Mapped[str] = mapped_column(String)  # "pagerduty" | "generic"
     alert_name: Mapped[str] = mapped_column(String)
     alert_body: Mapped[dict] = mapped_column(JSON)
@@ -49,6 +50,7 @@ class Incident(Base):
 
     actions: Mapped[list["AgentAction"]] = relationship(back_populates="incident")
     approvals: Mapped[list["ApprovalRequest"]] = relationship(back_populates="incident")
+    customer: Mapped[Optional["Customer"]] = relationship(back_populates="incidents")
 
 
 class AgentAction(Base):
@@ -115,3 +117,62 @@ class HostCredential(Base):
     private_key_pem: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     port: Mapped[int] = mapped_column(default=22)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class Customer(Base):
+    """Cloud SaaS customer.
+
+    Represents a customer account in the managed cloud service.
+    Each customer has an API key for authentication and their own incident namespace.
+    """
+
+    __tablename__ = "customers"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    api_key: Mapped[str] = mapped_column(String, unique=True, index=True)
+    email: Mapped[str] = mapped_column(String, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    incidents: Mapped[list["Incident"]] = relationship(back_populates="customer")
+    agents: Mapped[list["Agent"]] = relationship(back_populates="customer")
+
+
+class Agent(Base):
+    """Cloud agent registered by a customer.
+
+    Represents an agent instance running in a customer's VPC that connects to
+    RunbookAI cloud via SSE (Server-Sent Events) to receive incident webhooks
+    and stream back tool calls and responses.
+    """
+
+    __tablename__ = "agents"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    customer_id: Mapped[str] = mapped_column(ForeignKey("customers.id"), index=True)
+    name: Mapped[str] = mapped_column(String)  # user-friendly agent name
+    status: Mapped[str] = mapped_column(String, default="offline")  # "online" | "offline" | "error"
+    last_heartbeat: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    customer: Mapped["Customer"] = relationship(back_populates="agents")
+
+
+class PendingIncident(Base):
+    """Incident queued for delivery to an offline agent.
+
+    When an agent is offline, incidents are queued in the database
+    and delivered when the agent reconnects.
+    """
+
+    __tablename__ = "pending_incidents"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    customer_id: Mapped[str] = mapped_column(ForeignKey("customers.id"), index=True)
+    incident_id: Mapped[str] = mapped_column(ForeignKey("incidents.id"))
+    incident_payload: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    incident: Mapped["Incident"] = relationship()
