@@ -11,8 +11,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from runbookai.database import AsyncSessionLocal, get_session
-from runbookai.integrations.pagerduty import parse_pagerduty_payload, verify_signature
+from runbookai.integrations.pagerduty import parse_pagerduty_payload, verify_signature as verify_pagerduty_signature
 from runbookai.integrations.datadog import parse_datadog_payload
+from runbookai.integrations.grafana import parse_grafana_payload, verify_signature as verify_grafana_signature
 from runbookai.models import AgentAction, Incident, IncidentStatus
 
 logger = logging.getLogger("runbookai.api.webhooks")
@@ -96,7 +97,7 @@ async def pagerduty_webhook(
     from runbookai.config import settings
 
     raw_body = await request.body()
-    if not verify_signature(raw_body, x_pagerduty_signature, settings.pagerduty_webhook_secret):
+    if not verify_pagerduty_signature(raw_body, x_pagerduty_signature, settings.pagerduty_webhook_secret):
         logger.warning("PagerDuty webhook signature verification failed")
         raise HTTPException(status_code=401, detail="Invalid signature")
 
@@ -290,4 +291,69 @@ async def datadog_webhook(
         "alert_name": normalized["alert_name"],
         "incident_id": incident.id,
         "datadog_monitor_id": normalized.get("monitor_id", ""),
+    }
+
+
+@router.post("/grafana")
+async def grafana_webhook(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    session: AsyncSession = Depends(get_session),
+    x_grafana_signature: str = Header(default=""),
+):
+    """Receive a Grafana alert webhook, verify signature, create an Incident.
+
+    Verifies HMAC-SHA256 signature using GRAFANA_WEBHOOK_SECRET.
+    Only processes "firing" status (not "resolved" which is handled by callbacks).
+    """
+    from runbookai.config import settings
+
+    raw_body = await request.body()
+    if not verify_grafana_signature(raw_body, x_grafana_signature, settings.grafana_webhook_secret):
+        logger.warning("Grafana webhook signature verification failed")
+        raise HTTPException(status_code=401, detail="Invalid signature")
+
+    payload = await request.json()
+    normalized = parse_grafana_payload(payload)
+    if not normalized:
+        return {"status": "ignored"}
+
+    # Only create incidents for firing status; resolved is logged but not actioned
+    status = normalized.get("status", "")
+    if status != "firing":
+        logger.info(
+            "Grafana webhook %s for alert %s — logged but not actioned",
+            status,
+            normalized.get("alert_name", "unknown"),
+        )
+        return {
+            "status": "logged",
+            "event_type": status,
+            "alert_uid": normalized.get("alert_uid", ""),
+            "message": f"Status '{status}' logged but not actionable",
+        }
+
+    # Create incident for firing status
+    incident = Incident(
+        id=str(uuid.uuid4()),
+        source="grafana",
+        alert_name=normalized["alert_name"],
+        alert_body=payload,
+    )
+    session.add(incident)
+    await session.commit()
+    await session.refresh(incident)
+
+    background_tasks.add_task(run_agent_for_incident, incident.id)
+    logger.info(
+        "Grafana alert received: %s (alert_uid=%s runbookai_id=%s)",
+        normalized["alert_name"],
+        normalized.get("alert_uid", "?")[:16],
+        incident.id,
+    )
+    return {
+        "status": "accepted",
+        "alert_name": normalized["alert_name"],
+        "incident_id": incident.id,
+        "grafana_alert_uid": normalized.get("alert_uid", ""),
     }

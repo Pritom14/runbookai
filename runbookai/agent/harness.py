@@ -220,6 +220,9 @@ class AgentHarness:
                 # Write back to Datadog if this incident came from Datadog
                 await self._writeback_datadog(session, incident, resolution_summary, recorder)
 
+                # Write back to Grafana if this incident came from Grafana
+                await self._writeback_grafana(session, incident, resolution_summary, recorder)
+
                 # Phase 2C: Write-back loop — record incident as experience for future learning.
                 await self._record_experience(
                     session,
@@ -664,6 +667,94 @@ class AgentHarness:
                         "dd_monitor_id": dd_monitor_id,
                         "status": "failed",
                         "error": dd_result["message"],
+                    },
+                )
+
+    async def _writeback_grafana(
+        self,
+        session: Any,
+        incident: Any,
+        resolution_summary: str,
+        recorder: Optional[AgentTraceRecorder] = None,
+    ) -> None:
+        """Write back incident resolution to Grafana API if applicable.
+
+        Only writes back if:
+        1. incident.source == "grafana"
+        2. GRAFANA_API_KEY is configured
+        3. GRAFANA_BASE_URL is configured
+        4. The incident's alert_body contains a Grafana alert UID
+
+        Logs success/failure to audit trail.
+        """
+        if incident.source != "grafana":
+            return
+
+        if not settings.grafana_api_key or not settings.grafana_base_url:
+            logger.warning(
+                "incident=%s GRAFANA_API_KEY or GRAFANA_BASE_URL not configured",
+                self.incident_id,
+            )
+            return
+
+        # Extract alert UID from alert_body
+        alert_body = incident.alert_body or {}
+        alerts = alert_body.get("alerts", [])
+        if not alerts:
+            logger.warning(
+                "incident=%s Grafana alert UID not found in alert body",
+                self.incident_id,
+            )
+            return
+
+        alert = alerts[0]
+        alert_uid = alert.get("labels", {}).get("__alert_uid__", "")
+
+        if not alert_uid:
+            logger.warning(
+                "incident=%s Grafana alert UID not found in alert body",
+                self.incident_id,
+            )
+            return
+
+        # Call Grafana API to log alert closure
+        from runbookai.integrations.grafana import close_alert
+
+        gf_result = await close_alert(
+            alert_uid,
+            settings.grafana_api_key,
+            settings.grafana_base_url,
+            reason=resolution_summary,
+        )
+
+        if gf_result["success"]:
+            logger.info(
+                "incident=%s Grafana write-back successful: %s",
+                self.incident_id,
+                gf_result["message"],
+            )
+            if recorder:
+                await recorder.log_event(
+                    "grafana_writeback",
+                    {
+                        "alert_uid": alert_uid[:16],
+                        "status": "success",
+                        "message": gf_result["message"],
+                    },
+                )
+        else:
+            logger.error(
+                "incident=%s Grafana write-back failed: %s",
+                self.incident_id,
+                gf_result["message"],
+            )
+            if recorder:
+                await recorder.log_event(
+                    "grafana_writeback",
+                    {
+                        "alert_uid": alert_uid[:16],
+                        "status": "failed",
+                        "error": gf_result["message"],
                     },
                 )
 
