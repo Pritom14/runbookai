@@ -285,6 +285,22 @@ class AgentHarness:
             # After first iteration context.previous_actions is no longer
             # used — the agent's message history carries full state.
 
+            # Guard: Check if agent read critical thermal sensor but didn't call fan_override
+            await self._check_thermal_remediation_guard(
+                session, incident, action, result, actions_taken, recorder
+            )
+
+            # Exit early if thermal guard escalated
+            if hasattr(incident, "_force_exit") and incident._force_exit:
+                _ACTIVE_AGENTS.pop(self.incident_id, None)
+                return IncidentResult(
+                    incident_id=self.incident_id,
+                    resolved=False,
+                    summary=incident.summary,
+                    actions_taken=actions_taken,
+                    escalation_reason=incident.summary,
+                )
+
         # MAX_STEPS exhausted without resolution.
         escalation_reason = f"Reached MAX_STEPS ({self.MAX_STEPS}) without resolving incident."
         await self._escalate(session, incident, escalation_reason, recorder)
@@ -482,6 +498,51 @@ class AgentHarness:
             )
         except Exception as e:
             logger.warning("incident=%s failed to record experience: %s", self.incident_id, e)
+
+    async def _check_thermal_remediation_guard(
+        self,
+        session: Any,
+        incident: Any,
+        action: Any,
+        result: dict[str, Any],
+        actions_taken: list[dict[str, Any]],
+        recorder: AgentTraceRecorder,
+    ) -> None:
+        """Guard: track critical thermal state and force fan_override if agent skips it.
+
+        Pattern: If read_bmc_sensors finds any_critical=True, the NEXT action
+        MUST be fan_override. If the agent proposes something else, we escalate
+        with an error: "Agent did not execute critical remediation (fan_override)
+        despite critical thermal state."
+        """
+        # Track critical thermal state from read_bmc_sensors calls
+        if action.tool_name == "read_bmc_sensors":
+            if result.get("any_critical", False):
+                critical_alerts = result.get("critical_alerts", [])
+                logger.warning(
+                    "incident=%s read_bmc_sensors detected CRITICAL: %s",
+                    self.incident_id,
+                    critical_alerts,
+                )
+                # Store state in incident for the next iteration check
+                incident._thermal_critical_pending = True
+                incident._critical_alerts = critical_alerts
+
+        # Check if we were waiting for fan_override but got something else
+        elif hasattr(incident, "_thermal_critical_pending") and incident._thermal_critical_pending:
+            if action.tool_name != "fan_override":
+                escalation_msg = (
+                    f"Agent did not execute critical remediation. "
+                    f"Critical thermal state detected ({incident._critical_alerts}) "
+                    f"but agent proposed '{action.tool_name}' instead of 'fan_override'."
+                )
+                logger.error("incident=%s %s", self.incident_id, escalation_msg)
+                await self._escalate(session, incident, escalation_msg, recorder)
+                # Force incident into escalated state to prevent further loops
+                incident._force_exit = True
+            else:
+                # Agent correctly called fan_override — clear the flag
+                incident._thermal_critical_pending = False
 
 
 # ---------------------------------------------------------------------------
