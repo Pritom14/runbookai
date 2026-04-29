@@ -9,6 +9,7 @@ from runbookai.api.agents import router as agents_router
 from runbookai.api.analysis import router as analysis_router
 from runbookai.api.approvals import router as approvals_router
 from runbookai.api.bmc import router as bmc_router
+from runbookai.api.customer_dashboard import router as dashboard_router
 from runbookai.api.customers import router as customers_router
 from runbookai.api.hosts import router as hosts_router
 from runbookai.api.incidents import router as incidents_router
@@ -26,6 +27,7 @@ app = FastAPI(
 
 app.include_router(agents_router)
 app.include_router(customers_router)
+app.include_router(dashboard_router)
 app.include_router(webhooks_router)
 app.include_router(approvals_router)
 app.include_router(bmc_router)
@@ -50,6 +52,14 @@ async def startup_event() -> None:
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/dashboard")
+async def cloud_dashboard():
+    """Serve the cloud customer dashboard."""
+    from fastapi.responses import FileResponse
+    dashboard_file = pathlib.Path(__file__).parent / "static" / "cloud-dashboard.html"
+    return FileResponse(dashboard_file, media_type="text/html")
 
 
 def start():

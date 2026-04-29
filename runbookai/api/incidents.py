@@ -2,14 +2,16 @@
 
 import logging
 import pathlib
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Header
 from fastapi.responses import HTMLResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from runbookai.cloud.auth import get_customer_from_api_key
 from runbookai.database import get_session
-from runbookai.models import AgentAction, Incident
+from runbookai.models import AgentAction, Customer, Incident
 
 logger = logging.getLogger("runbookai.api.incidents")
 router = APIRouter(prefix="/incidents", tags=["incidents"])
@@ -20,11 +22,40 @@ async def list_incidents(
     limit: int = 50,
     offset: int = 0,
     session: AsyncSession = Depends(get_session),
+    x_api_key: str = Header(default=""),
 ):
-    result = await session.execute(
-        select(Incident).order_by(Incident.created_at.desc()).limit(limit).offset(offset)
-    )
+    """List incidents, optionally filtered by customer.
+
+    If X-API-Key header provided: returns only incidents for that customer.
+    If no API key: returns all non-cloud incidents (customer_id is NULL).
+    """
+    customer_id: Optional[str] = None
+
+    # If API key provided, filter by customer
+    if x_api_key:
+        customer = await get_customer_from_api_key(x_api_key, session)
+        if not customer:
+            raise HTTPException(status_code=401, detail="Invalid API key")
+        customer_id = customer.id
+
+    # Build query based on whether we're filtering by customer
+    if customer_id:
+        query = (
+            select(Incident)
+            .where(Incident.customer_id == customer_id)
+            .order_by(Incident.created_at.desc())
+        )
+    else:
+        # Non-API-key requests see only non-cloud incidents
+        query = (
+            select(Incident)
+            .where(Incident.customer_id.is_(None))
+            .order_by(Incident.created_at.desc())
+        )
+
+    result = await session.execute(query.limit(limit).offset(offset))
     incidents = result.scalars().all()
+
     return {
         "incidents": [
             {
@@ -36,15 +67,36 @@ async def list_incidents(
                 "resolved_at": i.resolved_at,
             }
             for i in incidents
-        ]
+        ],
+        "customer_id": customer_id,
     }
 
 
 @router.get("/{incident_id}")
-async def get_incident(incident_id: str, session: AsyncSession = Depends(get_session)):
+async def get_incident(
+    incident_id: str,
+    session: AsyncSession = Depends(get_session),
+    x_api_key: str = Header(default=""),
+):
+    """Get incident details, with customer isolation.
+
+    If X-API-Key provided: only accessible if customer matches API key.
+    If no API key: only accessible if incident is non-cloud (customer_id is NULL).
+    """
     incident = await session.get(Incident, incident_id)
     if incident is None:
         raise HTTPException(status_code=404, detail="Incident not found")
+
+    # Check customer isolation
+    if x_api_key:
+        customer = await get_customer_from_api_key(x_api_key, session)
+        if not customer or incident.customer_id != customer.id:
+            raise HTTPException(status_code=403, detail="Access denied")
+    else:
+        # Non-API-key access only to non-cloud incidents
+        if incident.customer_id is not None:
+            raise HTTPException(status_code=403, detail="Access denied")
+
     return {
         "id": incident.id,
         "alert_name": incident.alert_name,
@@ -54,6 +106,7 @@ async def get_incident(incident_id: str, session: AsyncSession = Depends(get_ses
         "alert_body": incident.alert_body,
         "created_at": incident.created_at,
         "resolved_at": incident.resolved_at,
+        "customer_id": incident.customer_id,
     }
 
 
@@ -64,11 +117,28 @@ async def replay_ui(incident_id: str):
 
 
 @router.get("/{incident_id}/replay")
-async def get_incident_replay(incident_id: str, session: AsyncSession = Depends(get_session)):
-    """AgentTrace — full chronological timeline of every agent action."""
+async def get_incident_replay(
+    incident_id: str,
+    session: AsyncSession = Depends(get_session),
+    x_api_key: str = Header(default=""),
+):
+    """AgentTrace — full chronological timeline of every agent action.
+
+    With customer isolation: only accessible with proper API key.
+    """
     incident = await session.get(Incident, incident_id)
     if incident is None:
         raise HTTPException(status_code=404, detail="Incident not found")
+
+    # Check customer isolation
+    if x_api_key:
+        customer = await get_customer_from_api_key(x_api_key, session)
+        if not customer or incident.customer_id != customer.id:
+            raise HTTPException(status_code=403, detail="Access denied")
+    else:
+        # Non-API-key access only to non-cloud incidents
+        if incident.customer_id is not None:
+            raise HTTPException(status_code=403, detail="Access denied")
 
     result = await session.execute(
         select(AgentAction)
@@ -86,6 +156,7 @@ async def get_incident_replay(incident_id: str, session: AsyncSession = Depends(
         "created_at": incident.created_at,
         "resolved_at": incident.resolved_at,
         "summary": incident.summary,
+        "customer_id": incident.customer_id,
         "timeline": [
             {
                 "t_seconds": int((a.created_at - base_time).total_seconds()),
