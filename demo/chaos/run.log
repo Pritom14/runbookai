@@ -30,3 +30,23 @@
 2026-04-26 23:26:20,910 - INFO - Starting attack: CPU spike
 2026-04-26 23:28:37,397 - INFO - Starting attack: CPU spike
 2026-04-26 23:31:24,788 - INFO - Starting attack: CPU spike
+2026-04-26 23:34:53,484 - INFO - Starting attack: Process kill
+2026-04-26 23:35:53,865 - INFO - Starting attack: Repeat process kill
+2026-04-26 23:37:12,995 - INFO - Starting attack: CPU spike
+2026-04-26 23:38:43,529 - INFO - Starting attack: Process kill
+2026-04-26 23:39:43,907 - INFO - Starting attack: OOM
+2026-04-26 23:41:04,329 - INFO - Starting attack: Disk fill
+2026-04-26 23:42:04,740 - INFO - Starting attack: Hardware temp
+2026-04-26 23:43:05,171 - INFO - Starting attack: Network latency
+2026-04-26 23:43:05,277 - ERROR - Failed to run attack Network latency: Command 'docker exec demo-app sh -c 'tc qdisc add dev eth0 root netem delay 800ms'' returned non-zero exit status 2.
+2026-04-26 23:44:05,571 - INFO - Starting attack: Log spam
+2026-04-26 23:46:13,876 - INFO - Starting attack: File handle exhaustion
+2026-04-26 23:46:13,961 - ERROR - Failed to run attack File handle exhaustion: Command 'docker exec demo-app sh -c 'for i in {1..100}; do exec 200>/tmp/fd$i; done'' returned non-zero exit status 1.
+2026-04-26 23:47:14,143 - INFO - Starting attack: Zombie processes
+2026-04-26 23:47:14,272 - ERROR - Failed to run attack Zombie processes: Command 'docker exec demo-app sh -c 'for i in {1..200}; do (sleep 0; exit) & done'' returned non-zero exit status 1.
+2026-04-26 23:48:14,465 - INFO - Starting attack: DNS broken
+2026-04-26 23:48:14,590 - ERROR - Failed to run attack DNS broken: Command 'docker exec demo-app sh -c 'echo 'nameserver 0.0.0.0' > /etc/resolv.conf'' returned non-zero exit status 1.
+2026-04-26 23:49:14,789 - INFO - Starting attack: Slow disk I/O
+2026-04-26 23:49:14,936 - ERROR - Failed to run attack Slow disk I/O: Command 'docker exec demo-app sh -c 'stress-ng --io 4 --timeout 25s'' returned non-zero exit status 1.
+2026-04-26 23:50:15,145 - INFO - Starting attack: Repeat process kill
+2026-04-26 23:50:15,264 - ERROR - Failed to run attack Repeat process kill: Command 'docker exec demo-app sh -c 'pkill -9 nginx'' returned non-zero exit status 1.

@@ -16,7 +16,14 @@ class Settings(BaseSettings):
     smtp_user: str = ""
     smtp_password: str = ""
     escalation_email: str = ""  # where to send escalation alerts
-    slack_webhook_url: str = ""
+    slack_webhook_url: str = ""  # Slack webhook for incident notifications
+    # Datadog integration (optional)
+    datadog_api_key: str = ""
+    datadog_site: str = ""  # "datadoghq.com", "us3.datadoghq.com", etc.
+    # Grafana integration (optional)
+    grafana_webhook_secret: str = ""
+    grafana_api_key: str = ""
+    grafana_base_url: str = ""
     # SSH defaults — used when no HostCredential row exists for a given host.
     ssh_default_username: str = ""
     ssh_private_key_path: str = ""  # path to PEM file, e.g. ~/.ssh/id_rsa

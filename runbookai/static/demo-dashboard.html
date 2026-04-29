@@ -3,236 +3,321 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>RunbookAI — Chaos Demo</title>
+  <title>RunbookAI — Live Demo</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: #0f1117;
+      background: #0a0c12;
       color: #e2e8f0;
       min-height: 100vh;
     }
 
-    /* ── Header bar ── */
+    /* ── Header ── */
     #header {
-      background: #1a1d27;
-      border-bottom: 1px solid #2d3148;
-      padding: 16px 32px;
+      background: #111420;
+      border-bottom: 1px solid #1e2235;
+      padding: 14px 32px;
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 16px;
     }
 
-    #header-title {
-      font-size: 1.125rem;
-      font-weight: 600;
-      color: #f8fafc;
-    }
-
-    .health-pill {
+    #header-left {
       display: flex;
       align-items: center;
-      gap: 8px;
-      padding: 6px 12px;
-      border-radius: 12px;
-      font-size: 0.75rem;
+      gap: 16px;
+    }
+
+    #header-logo {
+      font-size: 1rem;
       font-weight: 700;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      white-space: nowrap;
+      color: #fff;
+      letter-spacing: -0.3px;
     }
 
-    .health-pill.up {
-      background: #064e3b;
-      color: #34d399;
-      border: 1px solid #065f46;
-    }
+    #header-logo span { color: #6366f1; }
 
-    .health-pill.down {
-      background: #450a0a;
-      color: #f87171;
-      border: 1px solid #7f1d1d;
-    }
-
-    .health-pill::before {
-      content: "";
-      display: inline-block;
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: currentColor;
-    }
-
-    /* ── Container info bar ── */
-    #container-info {
-      background: #0f1117;
-      border-bottom: 1px solid #2d3148;
-      padding: 12px 32px;
-      font-size: 0.8rem;
-      color: #64748b;
+    #header-subtitle {
+      font-size: 0.75rem;
+      color: #4b5563;
       font-family: "SF Mono", "Fira Code", Menlo, monospace;
     }
 
-    /* ── Stats row ── */
-    #stats-row {
-      background: #0f1117;
-      border-bottom: 1px solid #2d3148;
-      padding: 12px 32px;
+    .server-pill {
       display: flex;
-      gap: 32px;
-      font-size: 0.8rem;
-    }
-
-    .stat-item {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-
-    .stat-label {
-      color: #64748b;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      border-radius: 20px;
       font-size: 0.7rem;
       font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      transition: all 0.3s;
     }
 
-    .stat-value {
-      color: #e2e8f0;
-      font-size: 1rem;
-      font-weight: 600;
+    .server-pill.up   { background: #052e1b; color: #34d399; border: 1px solid #064e3b; }
+    .server-pill.down { background: #1f0808; color: #f87171; border: 1px solid #450a0a; }
+
+    .server-pill::before {
+      content: "";
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+      flex-shrink: 0;
+    }
+
+    /* ── Hardware panel ── */
+    #hw-panel {
+      background: #0d1020;
+      border-bottom: 1px solid #1e2235;
+      padding: 20px 32px;
+      position: relative;
+      overflow: hidden;
+      transition: background 0.5s;
+    }
+
+    #hw-panel.alert-state {
+      background: #180a0a;
+      border-bottom-color: #450a0a;
+    }
+
+    #hw-panel.recovering-state {
+      background: #0a1810;
+      border-bottom-color: #064e3b;
+    }
+
+    #hw-panel-label {
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #374151;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    #hw-mode-badge {
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.6rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      display: none;
+    }
+
+    #hw-mode-badge.show-alert     { display: inline-block; background: #450a0a; color: #f87171; border: 1px solid #7f1d1d; }
+    #hw-mode-badge.show-recovering { display: inline-block; background: #052e1b; color: #34d399; border: 1px solid #064e3b; }
+
+    #hw-sensors {
+      display: flex;
+      gap: 0;
+      flex-wrap: wrap;
+    }
+
+    .sensor-block {
+      flex: 1;
+      min-width: 140px;
+      padding: 0 28px 0 0;
+      border-right: 1px solid #1a1f30;
+      margin-right: 28px;
+    }
+
+    .sensor-block:last-child { border-right: none; margin-right: 0; padding-right: 0; }
+
+    .sensor-label {
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #4b5563;
+      margin-bottom: 6px;
+    }
+
+    .sensor-value {
+      font-family: "SF Mono", "Fira Code", Menlo, monospace;
+      font-size: 2rem;
+      font-weight: 700;
+      letter-spacing: -1px;
+      line-height: 1;
+      transition: color 0.4s;
       font-variant-numeric: tabular-nums;
     }
 
+    .sensor-unit {
+      font-size: 0.75rem;
+      color: #4b5563;
+      margin-left: 3px;
+      font-weight: 400;
+      letter-spacing: 0;
+    }
+
+    .sensor-threshold {
+      font-size: 0.65rem;
+      color: #374151;
+      margin-top: 5px;
+      font-family: "SF Mono", "Fira Code", Menlo, monospace;
+    }
+
+    /* Sensor status colors */
+    .sensor-value.ok       { color: #e2e8f0; }
+    .sensor-value.warning  { color: #fbbf24; }
+    .sensor-value.critical {
+      color: #f87171;
+      animation: pulse-red 1s ease-in-out infinite;
+    }
+
+    @keyframes pulse-red {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.65; }
+    }
+
+    /* Mini bar under fan RPM */
+    .sensor-bar-wrap {
+      background: #1a1f30;
+      border-radius: 3px;
+      height: 3px;
+      width: 100%;
+      max-width: 100px;
+      margin-top: 6px;
+      overflow: hidden;
+    }
+
+    .sensor-bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.5s, background 0.4s;
+    }
+
+    .sensor-bar-fill.ok       { background: #34d399; }
+    .sensor-bar-fill.warning  { background: #fbbf24; }
+    .sensor-bar-fill.critical { background: #f87171; }
+
+    /* ── Stats strip ── */
+    #stats-strip {
+      background: #0a0c12;
+      border-bottom: 1px solid #1a1f30;
+      padding: 10px 32px;
+      display: flex;
+      gap: 32px;
+      align-items: center;
+    }
+
+    .stat-block { display: flex; flex-direction: column; gap: 1px; }
+
+    .stat-block .lbl {
+      font-size: 0.6rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #374151;
+    }
+
+    .stat-block .val {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #e2e8f0;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .stat-block .val.has-firing { color: #f87171; }
+
     /* ── Incidents container ── */
-    #incidents-container {
-      max-width: 1000px;
+    #incidents-wrap {
+      max-width: 1020px;
       margin: 0 auto;
-      padding: 24px 32px;
+      padding: 20px 32px 48px;
+    }
+
+    #incidents-section-label {
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #374151;
+      margin-bottom: 12px;
     }
 
     #incidents-container.empty {
       text-align: center;
-      color: #64748b;
-      padding: 80px 32px;
+      color: #374151;
+      padding: 60px 0;
+      font-size: 0.875rem;
     }
 
     /* ── Incident card ── */
     .incident-card {
-      background: #1a1d27;
-      border: 1px solid #2d3148;
+      background: #111420;
+      border: 1px solid #1e2235;
       border-radius: 8px;
-      padding: 16px 20px;
-      margin-bottom: 16px;
+      padding: 14px 18px;
+      margin-bottom: 10px;
       display: grid;
       grid-template-columns: 1fr auto;
       gap: 16px;
+      transition: border-color 0.3s;
     }
 
-    .incident-left {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
+    .incident-card.firing  { border-color: #450a0a; }
+    .incident-card.waiting { border-color: #78350f; }
 
-    .incident-name {
-      font-size: 1rem;
-      font-weight: 600;
-      color: #f8fafc;
-    }
+    .incident-left  { display: flex; flex-direction: column; gap: 10px; }
+    .incident-name  { font-size: 0.95rem; font-weight: 600; color: #f8fafc; }
 
-    .incident-meta {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      flex-wrap: wrap;
-    }
+    .incident-meta  { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
     .badge {
       display: inline-block;
-      padding: 3px 10px;
-      border-radius: 12px;
-      font-size: 0.75rem;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 0.68rem;
       font-weight: 700;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.05em;
       text-transform: uppercase;
       white-space: nowrap;
     }
 
-    .badge-resolved {
-      background: #064e3b;
-      color: #34d399;
-      border: 1px solid #065f46;
-    }
-
-    .badge-firing {
-      background: #450a0a;
-      color: #f87171;
-      border: 1px solid #7f1d1d;
-    }
-
-    .badge-pending {
-      background: #450a0a;
-      color: #f87171;
-      border: 1px solid #7f1d1d;
-    }
-
-    .badge-in_progress {
-      background: #450a0a;
-      color: #f87171;
-      border: 1px solid #7f1d1d;
-    }
-
-    .badge-waiting_approval {
-      background: #451a03;
-      color: #fbbf24;
-      border: 1px solid #78350f;
-    }
-
-    .badge-escalated {
-      background: #3e2c71;
-      color: #c4b5fd;
-      border: 1px solid #5b4a8a;
-    }
+    .badge-resolved       { background: #052e1b; color: #34d399; border: 1px solid #064e3b; }
+    .badge-pending,
+    .badge-in_progress    { background: #1f0808; color: #f87171; border: 1px solid #450a0a; }
+    .badge-waiting_approval { background: #1c0f00; color: #fbbf24; border: 1px solid #451a03; }
+    .badge-escalated      { background: #1a1040; color: #c4b5fd; border: 1px solid #3e2c71; }
 
     .duration {
-      background: #0f172a;
-      color: #94a3b8;
-      border: 1px solid #334155;
-      border-radius: 6px;
-      padding: 4px 8px;
-      font-size: 0.75rem;
+      background: #0d1020;
+      color: #64748b;
+      border: 1px solid #1e2235;
+      border-radius: 4px;
+      padding: 2px 7px;
+      font-size: 0.7rem;
       font-variant-numeric: tabular-nums;
-      white-space: nowrap;
       font-family: "SF Mono", "Fira Code", Menlo, monospace;
     }
 
     .timestamps {
       display: flex;
-      gap: 16px;
-      font-size: 0.75rem;
-      color: #64748b;
+      gap: 14px;
+      font-size: 0.7rem;
+      color: #4b5563;
       flex-wrap: wrap;
     }
 
-    .timestamp-item {
-      display: flex;
-      gap: 4px;
-    }
-
-    .timestamp-label {
-      color: #475569;
-    }
+    .ts-label { color: #374151; margin-right: 3px; }
 
     .attack-cmd {
-      background: #0f172a;
-      color: #94a3b8;
-      border: 1px solid #334155;
-      border-radius: 6px;
-      padding: 6px 10px;
-      font-size: 0.75rem;
+      background: #0d1020;
+      color: #64748b;
+      border: 1px solid #1e2235;
+      border-radius: 4px;
+      padding: 5px 9px;
+      font-size: 0.7rem;
       font-family: "SF Mono", "Fira Code", Menlo, monospace;
       max-width: 100%;
       overflow-x: auto;
@@ -242,279 +327,311 @@
     .incident-right {
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 8px;
       justify-content: flex-start;
       align-items: flex-end;
     }
 
     .view-replay {
-      color: #3b82f6;
+      color: #6366f1;
       text-decoration: none;
-      font-size: 0.8rem;
+      font-size: 0.75rem;
       font-weight: 500;
-      padding: 6px 10px;
-      border: 1px solid #1e40af;
+      padding: 5px 10px;
+      border: 1px solid #312e81;
       border-radius: 6px;
-      background: rgba(59, 130, 246, 0.05);
+      background: rgba(99, 102, 241, 0.05);
       transition: all 0.2s;
       white-space: nowrap;
     }
 
-    .view-replay:hover {
-      background: rgba(59, 130, 246, 0.1);
-      border-color: #3b82f6;
-      color: #60a5fa;
-    }
+    .view-replay:hover { background: rgba(99, 102, 241, 0.12); border-color: #6366f1; color: #818cf8; }
 
-    /* ── Responsive ── */
     @media (max-width: 768px) {
-      .incident-card {
-        grid-template-columns: 1fr;
-      }
-
-      .incident-right {
-        align-items: flex-start;
-      }
-
-      #incidents-container {
-        padding: 16px 16px;
-      }
-
-      #header {
-        padding: 12px 16px;
-      }
-
-      #container-info,
-      #stats-row {
-        padding: 12px 16px;
-      }
+      #hw-sensors  { gap: 16px; }
+      .sensor-block { min-width: 110px; border-right: none; }
+      .incident-card { grid-template-columns: 1fr; }
+      .incident-right { align-items: flex-start; }
+      #header, #hw-panel, #stats-strip, #incidents-wrap { padding-left: 16px; padding-right: 16px; }
     }
   </style>
 </head>
 <body>
 
+<!-- ── Header ────────────────────────────────────────────────── -->
 <div id="header">
-  <div id="header-title">RunbookAI — Chaos Demo</div>
-  <div id="health-pill" class="health-pill down">Server :7000 Down</div>
+  <div id="header-left">
+    <div id="header-logo">Runbook<span>AI</span></div>
+    <div id="header-subtitle">demo-app | SSH :2222 | HTTP :8080 | nginx</div>
+  </div>
+  <div id="server-pill" class="server-pill down">Server :7000 Down</div>
 </div>
 
-<div id="container-info">demo-app | SSH :2222 | HTTP :8080 | nginx</div>
-
-<div id="stats-row">
-  <div class="stat-item">
-    <div class="stat-label">Total Incidents</div>
-    <div id="stat-total" class="stat-value">0</div>
+<!-- ── Hardware sensors ──────────────────────────────────────── -->
+<div id="hw-panel">
+  <div id="hw-panel-label">
+    Hardware Layer — BMC Sensors
+    <span id="hw-mode-badge"></span>
   </div>
-  <div class="stat-item">
-    <div class="stat-label">Resolved</div>
-    <div id="stat-resolved" class="stat-value">0</div>
-  </div>
-  <div class="stat-item">
-    <div class="stat-label">Firing</div>
-    <div id="stat-firing" class="stat-value">0</div>
-  </div>
-  <div class="stat-item">
-    <div class="stat-label">Escalated</div>
-    <div id="stat-escalated" class="stat-value">0</div>
+  <div id="hw-sensors">
+    <div class="sensor-block" id="sb-cpu-temp">
+      <div class="sensor-label">CPU Temperature</div>
+      <div class="sensor-value ok" id="sv-cpu-temp">--<span class="sensor-unit">C</span></div>
+      <div class="sensor-threshold" id="st-cpu-temp">threshold 85 C</div>
+    </div>
+    <div class="sensor-block" id="sb-fan1">
+      <div class="sensor-label">Fan 1 RPM</div>
+      <div class="sensor-value ok" id="sv-fan1">--<span class="sensor-unit">RPM</span></div>
+      <div class="sensor-bar-wrap"><div class="sensor-bar-fill ok" id="bar-fan1" style="width:70%"></div></div>
+    </div>
+    <div class="sensor-block" id="sb-fan2">
+      <div class="sensor-label">Fan 2 RPM</div>
+      <div class="sensor-value ok" id="sv-fan2">--<span class="sensor-unit">RPM</span></div>
+      <div class="sensor-bar-wrap"><div class="sensor-bar-fill ok" id="bar-fan2" style="width:68%"></div></div>
+    </div>
+    <div class="sensor-block" id="sb-psu-v">
+      <div class="sensor-label">PSU Voltage</div>
+      <div class="sensor-value ok" id="sv-psu-v">--<span class="sensor-unit">V</span></div>
+      <div class="sensor-threshold">threshold 11.4 V</div>
+    </div>
+    <div class="sensor-block" id="sb-psu-p">
+      <div class="sensor-label">PSU Power Draw</div>
+      <div class="sensor-value ok" id="sv-psu-p">--<span class="sensor-unit">W</span></div>
+      <div class="sensor-threshold">threshold 300 W</div>
+    </div>
   </div>
 </div>
 
-<div id="incidents-container" class="empty">
-  <div>No incidents yet. Server is initializing...</div>
+<!-- ── Stats strip ───────────────────────────────────────────── -->
+<div id="stats-strip">
+  <div class="stat-block">
+    <div class="lbl">Total Incidents</div>
+    <div class="val" id="stat-total">0</div>
+  </div>
+  <div class="stat-block">
+    <div class="lbl">Resolved</div>
+    <div class="val" id="stat-resolved">0</div>
+  </div>
+  <div class="stat-block">
+    <div class="lbl">Firing</div>
+    <div class="val" id="stat-firing">0</div>
+  </div>
+  <div class="stat-block">
+    <div class="lbl">Escalated</div>
+    <div class="val" id="stat-escalated">0</div>
+  </div>
+</div>
+
+<!-- ── Incident list ─────────────────────────────────────────── -->
+<div id="incidents-wrap">
+  <div id="incidents-section-label">Incident Log</div>
+  <div id="incidents-container" class="empty">
+    No incidents yet. Waiting for chaos...
+  </div>
 </div>
 
 <script>
+// ── Metadata maps ─────────────────────────────────────────────
 const ATTACK_CMDS = {
-  "demo-app CPU high":            "stress-ng --cpu 4 --timeout 30s",
-  "demo-app service down":        "pkill -9 nginx",
-  "demo-app OOM":                 "stress-ng --vm 1 --vm-bytes 90% --timeout 20s",
-  "demo-app disk full":           "fallocate -l 50M /var/log/nginx/junk.log",
-  "CPU Temperature":              "sensor: CPU 92°C (simulated)",
-  "demo-app high latency":        "tc qdisc add dev eth0 root netem delay 800ms",
-  "demo-app log error rate spike":"yes ERROR >> /var/log/nginx/error.log",
-  "demo-app FD exhausted":        "for i in {1..100}; do exec 200>/tmp/fd$i; done",
-  "demo-app zombie processes":    "for i in {1..200}; do (sleep 0; exit) & done",
+  "demo-app CPU high":             "stress-ng --cpu 4 --timeout 30s",
+  "demo-app service down":         "pkill -9 nginx",
+  "demo-app OOM":                  "stress-ng --vm 1 --vm-bytes 90% --timeout 20s",
+  "demo-app disk full":            "fallocate -l 50M /var/log/nginx/junk.log",
+  "CPU Temperature":               "sensor: CPU thermal runaway (simulated BMC)",
+  "demo-app high latency":         "tc qdisc add dev eth0 root netem delay 800ms",
+  "demo-app log error rate spike": "yes ERROR >> /var/log/nginx/error.log",
+  "demo-app FD exhausted":         "for i in {1..100}; do exec 200>/tmp/fd$i; done",
+  "demo-app zombie processes":     "for i in {1..200}; do (sleep 0; exit) & done",
   "demo-app DNS resolution failing":"echo 'nameserver 0.0.0.0' > /etc/resolv.conf",
-  "demo-app disk I/O degraded":   "stress-ng --io 4 --timeout 25s",
+  "demo-app disk I/O degraded":    "stress-ng --io 4 --timeout 25s",
+  "Hardware: CPU thermal alert":   "BMC: thermal runaway — fan RPM drop detected",
+  "Hardware: fan failure":         "BMC: Fan1 RPM critical — 0 RPM",
 };
 
-let lastIncidents = [];
-let refreshInterval = null;
+// ── BMC sensor polling ────────────────────────────────────────
+const FAN_MAX = 4800;
 
-function formatTime(isoString) {
+function applyStatusClass(el, status) {
+  el.classList.remove("ok", "warning", "critical");
+  el.classList.add(status);
+}
+
+async function fetchBMCSensors() {
   try {
-    const date = new Date(isoString + 'Z');
-    return date.toLocaleTimeString(undefined, {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      timeZone: "Asia/Kolkata"
+    const r = await fetch("/bmc/sensors");
+    if (!r.ok) return;
+    const data = await r.json();
+    const s = data.sensors;
+    const mode = data.mode;
+
+    // CPU temp
+    const cpuTemp = s.CPU_Temp;
+    const cpuEl = document.getElementById("sv-cpu-temp");
+    cpuEl.innerHTML = `${cpuTemp.value.toFixed(1)}<span class="sensor-unit">C</span>`;
+    applyStatusClass(cpuEl, cpuTemp.status);
+    document.getElementById("st-cpu-temp").textContent =
+      `threshold ${cpuTemp.threshold_upper} C  |  ${cpuTemp.status.toUpperCase()}`;
+
+    // Fan 1
+    const f1 = s.Fan1_RPM;
+    const f1El = document.getElementById("sv-fan1");
+    f1El.innerHTML = `${f1.value.toLocaleString()}<span class="sensor-unit">RPM</span>`;
+    applyStatusClass(f1El, f1.status);
+    const bar1 = document.getElementById("bar-fan1");
+    bar1.style.width = `${Math.min(100, Math.round(f1.value / FAN_MAX * 100))}%`;
+    applyStatusClass(bar1, f1.status);
+
+    // Fan 2
+    const f2 = s.Fan2_RPM;
+    const f2El = document.getElementById("sv-fan2");
+    f2El.innerHTML = `${f2.value.toLocaleString()}<span class="sensor-unit">RPM</span>`;
+    applyStatusClass(f2El, f2.status);
+    const bar2 = document.getElementById("bar-fan2");
+    bar2.style.width = `${Math.min(100, Math.round(f2.value / FAN_MAX * 100))}%`;
+    applyStatusClass(bar2, f2.status);
+
+    // PSU voltage
+    const psuV = s.PSU1_Voltage;
+    const psuVEl = document.getElementById("sv-psu-v");
+    psuVEl.innerHTML = `${psuV.value.toFixed(3)}<span class="sensor-unit">V</span>`;
+    applyStatusClass(psuVEl, psuV.status);
+
+    // PSU power
+    const psuP = s.PSU1_Power;
+    const psuPEl = document.getElementById("sv-psu-p");
+    psuPEl.innerHTML = `${psuP.value.toFixed(0)}<span class="sensor-unit">W</span>`;
+    applyStatusClass(psuPEl, psuP.status);
+
+    // Panel glow state
+    const panel = document.getElementById("hw-panel");
+    const badge = document.getElementById("hw-mode-badge");
+    const anyCritical = Object.values(s).some(sv => sv.status === "critical");
+
+    if (mode === "recovering") {
+      panel.className = "recovering-state";
+      badge.className = "show-recovering";
+      badge.textContent = "Agent cooling — fans at max";
+    } else if (anyCritical) {
+      panel.className = "alert-state";
+      badge.className = "show-alert";
+      badge.textContent = "CRITICAL — agent responding";
+    } else {
+      panel.className = "";
+      badge.className = "";
+    }
+  } catch (_) { /* BMC not available yet */ }
+}
+
+// ── Incidents polling ─────────────────────────────────────────
+let lastIds = new Set();
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));
+}
+
+function fmt(iso) {
+  try {
+    return new Date(iso + "Z").toLocaleTimeString(undefined, {
+      hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: "Asia/Kolkata"
     });
-  } catch {
-    return "";
-  }
+  } catch { return ""; }
 }
 
-function formatDuration(startIso, endIso) {
+function dur(start, end) {
   try {
-    const start = new Date(startIso);
-    const end = endIso ? new Date(endIso) : new Date();
-    const ms = end - start;
-    const secs = Math.floor(ms / 1000);
-    if (secs < 60) return `${secs}s`;
-    const mins = Math.floor(secs / 60);
-    const remainSecs = secs % 60;
-    return remainSecs > 0 ? `${mins}m${remainSecs}s` : `${mins}m`;
-  } catch {
-    return "";
-  }
+    const ms = (end ? new Date(end) : new Date()) - new Date(start);
+    const s = Math.floor(ms / 1000);
+    if (s < 60) return `${s}s`;
+    return `${Math.floor(s / 60)}m${s % 60 > 0 ? (s % 60) + "s" : ""}`;
+  } catch { return ""; }
 }
 
-function getBadgeClass(status) {
-  const s = (status || "pending").toLowerCase();
+function badgeClass(st) {
+  const s = (st || "pending").toLowerCase();
   if (s === "resolved") return "badge-resolved";
   if (s === "escalated") return "badge-escalated";
   if (s === "waiting_approval") return "badge-waiting_approval";
-  if (s === "in_progress") return "badge-in_progress";
-  if (s === "pending") return "badge-pending";
-  return "badge-pending";
+  return "badge-in_progress";
 }
 
-function getStatusDisplay(status) {
-  if (!status) return "pending";
-  const s = status.toLowerCase();
-  if (s === "waiting_approval") return "waiting approval";
-  if (s === "in_progress") return "in progress";
-  return s;
+function statusLabel(st) {
+  if (!st) return "pending";
+  const s = st.toLowerCase();
+  return s === "waiting_approval" ? "waiting approval" : s === "in_progress" ? "in progress" : s;
 }
 
-function renderIncident(incident) {
-  const card = document.createElement("div");
-  card.className = "incident-card";
+function cardClass(st) {
+  const s = (st || "").toLowerCase();
+  if (["pending", "in_progress"].includes(s)) return "incident-card firing";
+  if (s === "waiting_approval") return "incident-card waiting";
+  return "incident-card";
+}
 
-  const statusDisplay = getStatusDisplay(incident.status);
-  const badgeClass = getBadgeClass(incident.status);
-  const duration = formatDuration(incident.created_at, incident.resolved_at);
-  const startTime = formatTime(incident.created_at);
-  const endTime = incident.resolved_at ? formatTime(incident.resolved_at) : "";
-  const attackCmd = ATTACK_CMDS[incident.alert_name] || "(no command mapping)";
-
-  card.innerHTML = `
-    <div class="incident-left">
-      <div class="incident-name">${escapeHtml(incident.alert_name || "Unknown Alert")}</div>
-      <div class="incident-meta">
-        <span class="badge ${badgeClass}">${statusDisplay}</span>
-        <span class="duration">${escapeHtml(duration)}</span>
-      </div>
-      <div class="timestamps">
-        <div class="timestamp-item">
-          <span class="timestamp-label">Started</span>
-          <span>${escapeHtml(startTime)}</span>
+function renderCard(inc) {
+  const cmd = ATTACK_CMDS[inc.alert_name] || "(injection)";
+  const endTime = inc.resolved_at ? fmt(inc.resolved_at) : "\u2014";
+  return `
+    <div class="${cardClass(inc.status)}">
+      <div class="incident-left">
+        <div class="incident-name">${esc(inc.alert_name || "Unknown Alert")}</div>
+        <div class="incident-meta">
+          <span class="badge ${badgeClass(inc.status)}">${esc(statusLabel(inc.status))}</span>
+          <span class="duration">${esc(dur(inc.created_at, inc.resolved_at))}</span>
         </div>
-        ${endTime ? `
-          <div class="timestamp-item">
-            <span class="timestamp-label">Resolved</span>
-            <span>${escapeHtml(endTime)}</span>
-          </div>
-        ` : `
-          <div class="timestamp-item">
-            <span class="timestamp-label">Resolved</span>
-            <span>—</span>
-          </div>
-        `}
+        <div class="timestamps">
+          <span><span class="ts-label">Started</span>${esc(fmt(inc.created_at))}</span>
+          <span><span class="ts-label">Resolved</span>${esc(endTime)}</span>
+        </div>
+        <div class="attack-cmd">${esc(cmd)}</div>
       </div>
-      <div class="attack-cmd">${escapeHtml(attackCmd)}</div>
-    </div>
-    <div class="incident-right">
-      <a href="/static/replay.html?id=${escapeHtml(incident.id)}" class="view-replay">View Replay →</a>
-    </div>
-  `;
-
-  return card;
-}
-
-function escapeHtml(text) {
-  const map = {
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#039;"
-  };
-  return String(text).replace(/[&<>"']/g, m => map[m]);
-}
-
-function updateStats(incidents) {
-  const total = incidents.length;
-  const resolved = incidents.filter(i => i.status === "resolved").length;
-  const firing = incidents.filter(i =>
-    ["pending", "in_progress", "waiting_approval"].includes((i.status || "pending").toLowerCase())
-  ).length;
-  const escalated = incidents.filter(i => i.status === "escalated").length;
-
-  document.getElementById("stat-total").textContent = total;
-  document.getElementById("stat-resolved").textContent = resolved;
-  document.getElementById("stat-firing").textContent = firing;
-  document.getElementById("stat-escalated").textContent = escalated;
+      <div class="incident-right">
+        <a href="/static/replay.html?id=${esc(inc.id)}" class="view-replay">Replay &#x2192;</a>
+      </div>
+    </div>`;
 }
 
 async function fetchIncidents() {
   try {
-    const response = await fetch("/incidents");
-    if (!response.ok) {
-      updateHealthPill(false);
-      return;
-    }
-
-    const data = await response.json();
-    updateHealthPill(true);
-
-    const incidents = data.incidents || [];
+    const r = await fetch("/incidents");
+    if (!r.ok) { setServerPill(false); return; }
+    setServerPill(true);
+    const { incidents = [] } = await r.json();
     incidents.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-    updateStats(incidents);
-    renderIncidents(incidents);
-    lastIncidents = incidents;
-  } catch (err) {
-    updateHealthPill(false);
-    console.error("Failed to fetch incidents:", err);
-  }
+    const total = incidents.length;
+    const resolved = incidents.filter(i => i.status === "resolved").length;
+    const firing = incidents.filter(i => ["pending","in_progress","waiting_approval"].includes((i.status||"").toLowerCase())).length;
+    const escalated = incidents.filter(i => i.status === "escalated").length;
+
+    document.getElementById("stat-total").textContent = total;
+    document.getElementById("stat-resolved").textContent = resolved;
+    const firingEl = document.getElementById("stat-firing");
+    firingEl.textContent = firing;
+    firingEl.className = firing > 0 ? "val has-firing" : "val";
+    document.getElementById("stat-escalated").textContent = escalated;
+
+    const container = document.getElementById("incidents-container");
+    if (total === 0) {
+      container.className = "empty";
+      container.innerHTML = "No incidents yet. Waiting for chaos...";
+      return;
+    }
+    container.className = "";
+    container.innerHTML = incidents.map(renderCard).join("");
+  } catch (_) { setServerPill(false); }
 }
 
-function updateHealthPill(isUp) {
-  const pill = document.getElementById("health-pill");
-  if (isUp) {
-    pill.textContent = "Server :7000 Up";
-    pill.className = "health-pill up";
-  } else {
-    pill.textContent = "Server :7000 Down";
-    pill.className = "health-pill down";
-  }
+function setServerPill(up) {
+  const el = document.getElementById("server-pill");
+  el.textContent = up ? "Server :7000 Up" : "Server :7000 Down";
+  el.className = up ? "server-pill up" : "server-pill down";
 }
 
-function renderIncidents(incidents) {
-  const container = document.getElementById("incidents-container");
-
-  if (incidents.length === 0) {
-    container.className = "empty";
-    container.innerHTML = "<div>No incidents yet. Waiting for chaos...</div>";
-    return;
-  }
-
-  container.className = "";
-  container.innerHTML = "";
-
-  incidents.forEach(incident => {
-    container.appendChild(renderIncident(incident));
-  });
-}
-
-function startAutoRefresh() {
-  fetchIncidents();
-  refreshInterval = setInterval(fetchIncidents, 2500);
-}
-
-startAutoRefresh();
+// ── Boot ──────────────────────────────────────────────────────
+fetchBMCSensors();
+fetchIncidents();
+setInterval(fetchBMCSensors, 900);
+setInterval(fetchIncidents, 2500);
 </script>
 </body>
 </html>

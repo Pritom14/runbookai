@@ -300,6 +300,56 @@ async def http_check(url: str, expected_status: int = 200) -> dict[str, Any]:
         return {"status": "error", "error": str(e), "healthy": False}
 
 
+async def read_bmc_sensors(_host: str = "localhost") -> dict[str, Any]:
+    """Read hardware sensor data from the BMC: CPU temperature, fan RPMs, PSU voltage.
+
+    Use this when investigating thermal alerts, fan failures, or hardware health issues.
+    Returns current readings and flags any sensors in critical state.
+    """
+    logger.info("read_bmc_sensors")
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get("http://localhost:7000/bmc/sensors")
+            r.raise_for_status()
+            data = r.json()
+            sensors = data.get("sensors", {})
+            alerts = [
+                f"{name}: {s['value']}{s['unit']} CRITICAL"
+                f" (threshold: {s.get('threshold_upper') or s.get('threshold_lower')})"
+                for name, s in sensors.items()
+                if s["status"] == "critical"
+            ]
+            return {
+                "status": "ok",
+                "mode": data.get("mode", "unknown"),
+                "sensors": sensors,
+                "critical_alerts": alerts,
+                "any_critical": len(alerts) > 0,
+            }
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+async def fan_override(speed_percent: int = 100) -> dict[str, Any]:
+    """Override BMC fan speed to maximum to cool an overheating system.
+
+    Sends a fan speed override command to the BMC. Safe to call — only increases
+    cooling. The BMC will automatically return fans to normal once temperature drops.
+    """
+    logger.info("fan_override: speed_percent=%d", speed_percent)
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.post(
+                "http://localhost:7000/bmc/fan_override",
+                params={"speed_percent": speed_percent},
+            )
+            r.raise_for_status()
+            result = r.json()
+            return {"status": "ok", **result}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
 async def scale_service(service: str, replicas: int) -> dict[str, Any]:
     """Scale a Kubernetes deployment to N replicas.
 
@@ -504,6 +554,44 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "read_bmc_sensors",
+        "description": (
+            "Read hardware sensor data from the BMC: CPU temperature, fan RPMs, PSU voltage. "
+            "Use this to diagnose thermal alerts, fan failures, or hardware health issues. "
+            "Returns current sensor values and flags any sensors in critical state."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "_host": {
+                    "type": "string",
+                    "description": "BMC host (default: localhost)",
+                    "default": "localhost",
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "fan_override",
+        "description": (
+            "Override BMC fan speed to cool an overheating system. "
+            "Call this when CPU temperature exceeds the critical threshold (85 C). "
+            "The BMC will ramp fans to maximum and gradually restore normal speed once temperature drops."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "speed_percent": {
+                    "type": "integer",
+                    "description": "Fan speed override percentage (1-100). Default 100 (maximum cooling).",
+                    "default": 100,
+                },
+            },
+            "required": [],
+        },
+    },
+    {
         "name": "finish",
         "description": (
             "Signal that the incident is resolved (or that human escalation is needed). "
@@ -537,6 +625,8 @@ TOOL_REGISTRY: dict[str, Any] = {
     "clear_disk": clear_disk,
     "http_check": http_check,
     "scale_service": scale_service,
+    "read_bmc_sensors": read_bmc_sensors,
+    "fan_override": fan_override,
     "finish": finish,
 }
 

@@ -84,11 +84,19 @@ async def pagerduty_webhook(
     session: AsyncSession = Depends(get_session),
     x_pagerduty_signature: str = Header(default=""),
 ):
-    """Receive a PagerDuty v3 webhook, create an Incident, kick off the agent."""
+    """Receive a PagerDuty v3 webhook, create an Incident, kick off the agent.
+
+    Supports event types: incident.triggered, incident.acknowledged,
+    incident.resolved, incident.reassigned.
+
+    For triggered events: creates a new RunbookAI incident and starts the agent.
+    For other event types: logs but doesn't create incident (handled by PagerDuty callbacks).
+    """
     from runbookai.config import settings
 
     raw_body = await request.body()
     if not verify_signature(raw_body, x_pagerduty_signature, settings.pagerduty_webhook_secret):
+        logger.warning("PagerDuty webhook signature verification failed")
         raise HTTPException(status_code=401, detail="Invalid signature")
 
     payload = await request.json()
@@ -96,6 +104,23 @@ async def pagerduty_webhook(
     if not normalized:
         return {"status": "ignored"}
 
+    # Only create incidents for triggered events; other events are informational
+    event_type = normalized.get("status", "")
+    if event_type != "triggered":
+        logger.info(
+            "PagerDuty event %s for incident %s (service=%s) — logged but not actioned",
+            event_type,
+            normalized.get("incident_id", "unknown"),
+            normalized.get("service_name", "unknown"),
+        )
+        return {
+            "status": "logged",
+            "event_type": event_type,
+            "incident_id": normalized.get("incident_id", ""),
+            "message": f"Event type '{event_type}' logged but not actionable",
+        }
+
+    # Create incident for triggered events
     incident = Incident(
         id=str(uuid.uuid4()),
         source="pagerduty",
@@ -107,11 +132,19 @@ async def pagerduty_webhook(
     await session.refresh(incident)
 
     background_tasks.add_task(run_agent_for_incident, incident.id)
-    logger.info("PagerDuty alert received: %s id=%s", normalized["alert_name"], incident.id)
+    logger.info(
+        "PagerDuty incident triggered: %s (pd_id=%s service=%s runbookai_id=%s)",
+        normalized["alert_name"],
+        normalized.get("incident_id", "?"),
+        normalized.get("service_name", "?"),
+        incident.id,
+    )
     return {
         "status": "accepted",
         "alert_name": normalized["alert_name"],
         "incident_id": incident.id,
+        "pagerduty_incident_id": normalized.get("incident_id", ""),
+        "service": normalized.get("service_name", ""),
     }
 
 

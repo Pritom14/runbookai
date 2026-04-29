@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RunbookAI Chaos Board</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: #0a0c12;
+      color: #e2e8f0;
+      font-family: system-ui, -apple-system, sans-serif;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: #0d1020;
+      border-bottom: 1px solid #1e2235;
+      padding: 12px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 14px;
+    }
+
+    .header-left {
+      display: flex;
+      gap: 4px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+
+    .header-left .ai {
+      color: #6366f1;
+    }
+
+    .header-center {
+      flex: 1;
+      text-align: center;
+      font-family: "SF Mono", "Fira Code", Menlo, monospace;
+      font-size: 13px;
+    }
+
+    .cost-counter {
+      color: #4b5563;
+    }
+
+    .cost-counter.active {
+      color: #f87171;
+      font-weight: 600;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .health-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: #0a0c12;
+      border: 1px solid #1e2235;
+      padding: 6px 12px;
+      border-radius: 12px;
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    .health-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #34d399;
+    }
+
+    .health-dot.critical {
+      background: #f87171;
+      animation: pulse-red 1s infinite;
+    }
+
+    @keyframes pulse-red {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .main-container {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+      border-bottom: 1px solid #1e2235;
+    }
+
+    .left-panel {
+      flex: 0 0 40%;
+      border-right: 1px solid #1e2235;
+      padding: 20px;
+      overflow-y: auto;
+      background: #0d1020;
+    }
+
+    .right-panel {
+      flex: 1;
+      padding: 20px;
+      overflow: hidden;
+      background: #0d1020;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .section {
+      margin-bottom: 24px;
+    }
+
+    .section-title {
+      font-weight: 600;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #6366f1;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #1e2235;
+    }
+
+    .sensor-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      font-family: "SF Mono", "Fira Code", Menlo, monospace;
+      font-size: 12px;
+      border-radius: 4px;
+      transition: background-color 0.3s;
+    }
+
+    .sensor-row.critical {
+      background: rgba(248, 113, 113, 0.1);
+    }
+
+    .sensor-label {
+      flex: 0 0 120px;
+      color: #e2e8f0;
+    }
+
+    .sensor-value {
+      flex: 1;
+      text-align: right;
+      color: #e2e8f0;
+      font-weight: 500;
+    }
+
+    .sensor-value.critical {
+      animation: pulse-red 1s infinite;
+    }
+
+    .sensor-status {
+      width: 24px;
+      text-align: right;
+      font-weight: 600;
+    }
+
+    .status-ok {
+      color: #34d399;
+    }
+
+    .status-warning {
+      color: #fbbf24;
+    }
+
+    .status-critical {
+      color: #f87171;
+    }
+
+    .incident-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      margin-right: 8px;
+    }
+
+    .badge-resolved {
+      background: rgba(52, 211, 153, 0.2);
+      color: #34d399;
+    }
+
+    .badge-firing {
+      background: rgba(248, 113, 113, 0.2);
+      color: #f87171;
+    }
+
+    .badge-escalated {
+      background: rgba(251, 191, 36, 0.2);
+      color: #fbbf24;
+    }
+
+    .agent-feed {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: #0a0c12;
+      border: 1px solid #1e2235;
+      border-radius: 4px;
+      padding: 12px;
+      overflow-y: auto;
+      font-family: "SF Mono", "Fira Code", Menlo, monospace;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .feed-event {
+      padding: 6px 0;
+      color: #e2e8f0;
+      animation: slideUp 0.15s ease-out;
+    }
+
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .feed-event.resolved {
+      color: #34d399;
+      font-weight: 600;
+    }
+
+    .feed-event.escalated {
+      color: #fbbf24;
+      font-weight: 600;
+    }
+
+    .feed-timestamp {
+      color: #4b5563;
+      margin-right: 8px;
+    }
+
+    .feed-idle {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      text-align: center;
+      color: #4b5563;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .idle-text {
+      font-size: 13px;
+    }
+
+    .idle-status {
+      font-size: 12px;
+      color: #4b5563;
+    }
+
+    .bottom-section {
+      background: #0d1020;
+      border-top: 1px solid #1e2235;
+      padding: 16px 20px;
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .attack-button {
+      padding: 10px 16px;
+      background: #0a0c12;
+      border: 2px solid #6366f1;
+      color: #e2e8f0;
+      border-radius: 4px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+
+    .attack-button:hover:not(:disabled) {
+      background: #6366f1;
+      color: #0a0c12;
+    }
+
+    .attack-button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .attack-button.injecting {
+      background: #f87171;
+      border-color: #f87171;
+      animation: pulse-red 0.3s;
+    }
+
+    .attack-button:active:not(:disabled) {
+      transform: scale(0.98);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-left">
+      <span>Runbook</span>
+      <span class="ai">AI</span>
+    </div>
+    <div class="header-center">
+      <span class="cost-counter" id="costCounter">$0 — system healthy</span>
+    </div>
+    <div class="header-right">
+      <div class="health-pill">
+        <div class="health-dot" id="healthDot"></div>
+        <span id="healthStatus">HEALTHY</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="main-container">
+    <div class="left-panel">
+      <div class="section">
+        <div class="section-title">BMC Hardware</div>
+        <div class="sensor-row" id="cpu-temp-row">
+          <span class="sensor-label">CPU Temp</span>
+          <span class="sensor-value" id="cpuTempVal">--°C</span>
+          <span class="sensor-status status-ok" id="cpuTempStatus">✓</span>
+        </div>
+        <div class="sensor-row" id="fan1-row">
+          <span class="sensor-label">Fan 1</span>
+          <span class="sensor-value" id="fan1Val">-- RPM</span>
+          <span class="sensor-status status-ok" id="fan1Status">✓</span>
+        </div>
+        <div class="sensor-row" id="fan2-row">
+          <span class="sensor-label">Fan 2</span>
+          <span class="sensor-value" id="fan2Val">-- RPM</span>
+          <span class="sensor-status status-ok" id="fan2Status">✓</span>
+        </div>
+        <div class="sensor-row" id="psu1-voltage-row">
+          <span class="sensor-label">PSU</span>
+          <span class="sensor-value" id="psu1VoltageVal">-- V</span>
+          <span class="sensor-status status-ok" id="psu1VoltageStatus">✓</span>
+        </div>
+        <div class="sensor-row" id="psu1-power-row">
+          <span class="sensor-label">PSU Pwr</span>
+          <span class="sensor-value" id="psu1PowerVal">-- W</span>
+          <span class="sensor-status status-ok" id="psu1PowerStatus">✓</span>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Software</div>
+        <div class="sensor-row">
+          <span class="sensor-label">nginx</span>
+          <span class="sensor-value">UP</span>
+          <span class="sensor-status status-ok">✓</span>
+        </div>
+        <div class="sensor-row">
+          <span class="sensor-label">HTTP</span>
+          <span class="sensor-value">200</span>
+          <span class="sensor-status status-ok">✓</span>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Last Incident</div>
+        <div id="lastIncident" style="font-family: 'SF Mono', 'Fira Code', Menlo, monospace; font-size: 12px; color: #4b5563;">
+          None
+        </div>
+      </div>
+    </div>
+
+    <div class="right-panel">
+      <div class="section-title" style="margin-bottom: 12px;">Agent Reasoning Feed</div>
+      <div class="agent-feed" id="agentFeed">
+        <div class="feed-idle">
+          <div class="idle-text">runbookai agent idle</div>
+          <div class="idle-status">waiting for incident...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bottom-section">
+    <button class="attack-button" data-attack="cpu-spike">CPU Spike</button>
+    <button class="attack-button" data-attack="kill-nginx">Kill nginx</button>
+    <button class="attack-button" data-attack="thermal-runaway">Thermal Runaway</button>
+    <button class="attack-button" data-attack="fan-failure">Fan Failure</button>
+    <button class="attack-button" data-attack="disk-fill">Disk Fill</button>
+    <button class="attack-button" data-attack="oom">OOM</button>
+  </div>
+
+  <script>
+    const API_BASE = window.location.origin;
+    let currentIncidentId = null;
+    let incidentStartTime = null;
+    let incidentActive = false;
+    let lastFeedEventCount = 0;
+    let lastIncidentStatus = null;
+
+    const attackConfig = {
+      'cpu-spike': { alert_name: 'demo-app CPU high', bmc_action: null },
+      'kill-nginx': { alert_name: 'demo-app service down', bmc_action: null },
+      'thermal-runaway': { alert_name: 'Hardware: CPU thermal alert', bmc_action: 'thermal_failure' },
+      'fan-failure': { alert_name: 'Hardware: fan failure', bmc_action: 'fan_failure' },
+      'disk-fill': { alert_name: 'demo-app disk full', bmc_action: null },
+      'oom': { alert_name: 'demo-app OOM', bmc_action: null }
+    };
+
+    function formatCost(cost) {
+      return cost.toFixed(2);
+    }
+
+    function updateCostCounter() {
+      const counterEl = document.getElementById('costCounter');
+      const costPerSecond = 300000 / 3600;
+
+      if (incidentActive && incidentStartTime) {
+        const elapsed = (Date.now() - incidentStartTime) / 1000;
+        const cost = elapsed * costPerSecond;
+        counterEl.textContent = `$${formatCost(cost)} lost`;
+        counterEl.classList.add('active');
+      } else if (!incidentActive && lastIncidentStatus === 'resolved' && currentIncidentId) {
+        // Use incident's actual resolved time, not current time
+        if (!counterEl.dataset.frozenCost) {
+          fetch(`${API_BASE}/incidents/${currentIncidentId}`)
+            .then(r => r.json())
+            .then(inc => {
+              if (inc.created_at && inc.resolved_at) {
+                const created = new Date(inc.created_at).getTime();
+                const resolved = new Date(inc.resolved_at).getTime();
+                const elapsed = (resolved - created) / 1000;
+                const cost = elapsed * costPerSecond;
+                counterEl.textContent = `Incident cost: $${formatCost(cost)} — recovered`;
+                counterEl.dataset.frozenCost = 'true';
+                counterEl.classList.remove('active');
+              }
+            })
+            .catch(() => {});
+        }
+      } else if (!incidentActive) {
+        counterEl.textContent = '$0 — system healthy';
+        counterEl.classList.remove('active');
+        counterEl.removeAttribute('data-frozen-cost');
+        incidentStartTime = null;
+      }
+    }
+
+    function updateHealthPill(isActive) {
+      const dot = document.getElementById('healthDot');
+      const status = document.getElementById('healthStatus');
+
+      if (isActive) {
+        dot.classList.add('critical');
+        status.textContent = 'INCIDENT ACTIVE';
+      } else {
+        dot.classList.remove('critical');
+        status.textContent = 'HEALTHY';
+      }
+    }
+
+    async function pollBmcSensors() {
+      try {
+        const response = await fetch(`${API_BASE}/bmc/sensors`);
+        if (!response.ok) return;
+        const data = await response.json();
+
+        updateSensorRow('cpuTempVal', 'cpuTempStatus', 'cpuTempRow', data.CPU_Temp);
+        updateSensorRow('fan1Val', 'fan1Status', 'fan1Row', data.Fan1_RPM, 'RPM');
+        updateSensorRow('fan2Val', 'fan2Status', 'fan2Row', data.Fan2_RPM, 'RPM');
+        updateSensorRow('psu1VoltageVal', 'psu1VoltageStatus', 'psu1VoltageRow', data.PSU1_Voltage, 'V');
+        updateSensorRow('psu1PowerVal', 'psu1PowerStatus', 'psu1PowerRow', data.PSU1_Power, 'W');
+      } catch (e) {
+        console.log('BMC poll error:', e.message);
+      }
+    }
+
+    function updateSensorRow(valueId, statusId, rowId, sensorData, unit = '') {
+      if (!sensorData) return;
+
+      const valueEl = document.getElementById(valueId);
+      const statusEl = document.getElementById(statusId);
+      const rowEl = document.getElementById(rowId);
+
+      const value = sensorData.value;
+      const status = sensorData.status;
+
+      valueEl.textContent = unit ? `${value}${unit}` : `${value}°C`;
+
+      rowEl.classList.remove('critical');
+      valueEl.classList.remove('critical');
+      statusEl.classList.remove('status-ok', 'status-warning', 'status-critical');
+
+      if (status === 'ok') {
+        statusEl.textContent = '✓';
+        statusEl.classList.add('status-ok');
+      } else if (status === 'warning') {
+        statusEl.textContent = '⚠';
+        statusEl.classList.add('status-warning');
+      } else if (status === 'critical') {
+        statusEl.textContent = '✗';
+        statusEl.classList.add('status-critical');
+        valueEl.classList.add('critical');
+        rowEl.classList.add('critical');
+      }
+    }
+
+    async function pollLatestIncident() {
+      try {
+        const response = await fetch(`${API_BASE}/incidents?limit=1`);
+        if (!response.ok) return;
+        const data = await response.json();
+
+        if (data.incidents && data.incidents.length > 0) {
+          const incident = data.incidents[0];
+          currentIncidentId = incident.id;
+
+          const wasActive = incidentActive;
+          incidentActive = incident.status === 'in_progress' || incident.status === 'pending';
+          lastIncidentStatus = incident.status;
+
+          if (wasActive && !incidentActive) {
+            setTimeout(() => {
+              lastFeedEventCount = 0;
+              pollIncidentReplay();
+            }, 500);
+          }
+
+          if (!wasActive && incidentActive) {
+            incidentStartTime = Date.now();
+            lastFeedEventCount = 0;
+            document.getElementById('agentFeed').innerHTML = '';
+            pollIncidentReplay();
+          }
+
+          updateHealthPill(incidentActive);
+          updateLastIncidentDisplay(incident);
+        } else {
+          if (incidentActive) {
+            incidentActive = false;
+            lastIncidentStatus = 'resolved';
+            updateHealthPill(false);
+          }
+        }
+      } catch (e) {
+        console.log('Incident poll error:', e.message);
+      }
+    }
+
+    function updateLastIncidentDisplay(incident) {
+      const lastIncidentEl = document.getElementById('lastIncident');
+      const badges = {
+        'resolved': 'badge-resolved',
+        'firing': 'badge-firing',
+        'escalated': 'badge-escalated'
+      };
+      const badgeClass = badges[incident.status] || 'badge-firing';
+      const statusLabel = incident.status.charAt(0).toUpperCase() + incident.status.slice(1);
+
+      let duration = '';
+      if (incident.status === 'resolved') {
+        const durationSeconds = Math.floor((Date.now() - new Date(incident.created_at).getTime()) / 1000);
+        duration = ` ${durationSeconds}s`;
+      }
+
+      lastIncidentEl.innerHTML = `
+        <span class="incident-badge ${badgeClass}">${statusLabel}</span>
+        <span>${incident.alert_name}</span>
+        <span style="color: #4b5563;">${duration}</span>
+      `;
+    }
+
+    async function pollIncidentReplay() {
+      if (!currentIncidentId) return;
+
+      try {
+        const response = await fetch(`${API_BASE}/incidents/${currentIncidentId}/replay`);
+        if (!response.ok) return;
+        const data = await response.json();
+
+        if (!data.timeline) return;
+
+        const events = data.timeline;
+        if (events.length > lastFeedEventCount) {
+          for (let i = lastFeedEventCount; i < events.length; i++) {
+            renderFeedEvent(events[i]);
+          }
+          lastFeedEventCount = events.length;
+          scrollFeedToBottom();
+        }
+      } catch (e) {
+        console.log('Replay poll error:', e.message);
+      }
+    }
+
+    function renderFeedEvent(event) {
+      const feed = document.getElementById('agentFeed');
+
+      if (feed.querySelector('.feed-idle')) {
+        feed.innerHTML = '';
+      }
+
+      const timestamp = event.timestamp_offset ? `[+${event.timestamp_offset.toFixed(1)}s]` : '[+0.0s]';
+      const div = document.createElement('div');
+      div.className = 'feed-event';
+
+      let text = '';
+
+      if (event.event === 'runbook_matched') {
+        text = `Runbook matched: ${event.alert_name || ''}`;
+      } else if (event.event === 'used_past_experience') {
+        const count = event.experience_count || 0;
+        text = `Memory: ${count} past experience(s) found`;
+      } else if (event.event === 'resolved') {
+        const duration = event.incident_duration || 0;
+        text = `Incident resolved in ${duration}s`;
+        div.classList.add('resolved');
+      } else if (event.event === 'escalated') {
+        text = `Escalated to human`;
+        div.classList.add('escalated');
+      } else if (event.event === 'experience_saved') {
+        text = `Experience saved to memory`;
+      } else if (event.tool_name === 'read_bmc_sensors') {
+        if (event.output && event.output.CPU_Temp) {
+          text = `read_bmc_sensors → CPU ${event.output.CPU_Temp}°C, Fans OK`;
+        } else {
+          text = `read_bmc_sensors → ${event.output ? event.output.status || 'ok' : 'ok'}`;
+        }
+      } else if (event.tool_name === 'fan_override') {
+        const speed = event.input && event.input.speed_percent ? event.input.speed_percent : '100';
+        text = `fan_override(${speed}%) → Fan1: 4200 RPM. Cooling initiated.`;
+      } else if (event.tool_name) {
+        const inputStr = event.input ? JSON.stringify(event.input).substring(0, 30) : '';
+        const outputStr = event.output ? (typeof event.output === 'string' ? event.output : event.output.status || 'ok') : 'ok';
+        text = `${event.tool_name}${inputStr ? '(' + inputStr + ')' : ''} → ${outputStr}`;
+      } else {
+        text = JSON.stringify(event).substring(0, 80);
+      }
+
+      div.innerHTML = `<span class="feed-timestamp">${timestamp}</span><span>${text}</span>`;
+      feed.appendChild(div);
+    }
+
+    function scrollFeedToBottom() {
+      const feed = document.getElementById('agentFeed');
+      feed.scrollTop = feed.scrollHeight;
+    }
+
+    async function fireAttack(attackType) {
+      const config = attackConfig[attackType];
+      if (!config) return;
+
+      try {
+        console.log(`[ATTACK] Firing ${attackType}: alert_name="${config.alert_name}"`);
+        const payload = { alert_name: config.alert_name };
+        console.log(`[ATTACK] Webhook payload:`, JSON.stringify(payload));
+
+        const response = await fetch(`${API_BASE}/webhooks/generic`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const responseText = await response.text();
+        console.log(`[ATTACK] Webhook response status: ${response.status}, body: ${responseText}`);
+
+        if (!response.ok) {
+          console.error(`[ATTACK] Webhook returned ${response.status}:`, responseText);
+          return false;
+        }
+
+        if (config.bmc_action) {
+          console.log(`[ATTACK] Triggering BMC action: ${config.bmc_action}`);
+          const bmcResponse = await fetch(`${API_BASE}/bmc/control?action=${config.bmc_action}`, {
+            method: 'POST'
+          });
+          console.log(`[ATTACK] BMC response status: ${bmcResponse.status}`);
+        }
+
+        return response.ok;
+      } catch (e) {
+        console.error('[ATTACK] Error:', e.message, e);
+        return false;
+      }
+    }
+
+    document.querySelectorAll('.attack-button').forEach(btn => {
+      btn.addEventListener('click', async function() {
+        if (this.disabled) return;
+
+        const attackType = this.dataset.attack;
+        this.disabled = true;
+        this.classList.add('injecting');
+        this.textContent = 'Injecting...';
+
+        const success = await fireAttack(attackType);
+
+        const originalText = {
+          'cpu-spike': 'CPU Spike',
+          'kill-nginx': 'Kill nginx',
+          'thermal-runaway': 'Thermal Runaway',
+          'fan-failure': 'Fan Failure',
+          'disk-fill': 'Disk Fill',
+          'oom': 'OOM'
+        }[attackType];
+
+        setTimeout(() => {
+          this.classList.remove('injecting');
+          this.textContent = originalText;
+          this.disabled = false;
+        }, 5000);
+      });
+    });
+
+    setInterval(updateCostCounter, 500);
+    setInterval(pollBmcSensors, 500);
+    setInterval(pollLatestIncident, 500);
+    setInterval(pollIncidentReplay, 500);
+
+    pollBmcSensors();
+    pollLatestIncident();
+  </script>
+</body>
+</html>

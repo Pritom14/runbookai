@@ -35,34 +35,62 @@ def verify_signature(payload: bytes, signature_header: str, secret: str) -> bool
 def parse_pagerduty_payload(payload: dict) -> dict:
     """Parse a PagerDuty v3 webhook payload into a normalized incident dict.
 
+    Handles multiple event types: incident.triggered, incident.acknowledged,
+    incident.resolved, incident.reassigned.
+
     Returns:
         {
             "alert_name": str,
-            "service": str,
+            "incident_id": str,  # PagerDuty incident ID
+            "service_id": str,   # PagerDuty service ID
+            "service_name": str, # Human-readable service name
+            "status": str,       # "triggered", "acknowledged", "resolved", "reassigned"
             "severity": str,
             "description": str,
             "raw": dict,  # full original payload
         }
 
-    TODO: Handle all event types (trigger, acknowledge, resolve, reassign).
-    Currently only handles "incident.triggered".
+    Returns empty dict if event type is not trigger/acknowledge/resolve/reassign.
     """
     event = payload.get("event", {})
     event_type = event.get("event_type", "")
     data = event.get("data", {})
 
-    if event_type != "incident.triggered":
+    # Map PagerDuty event types to normalized status
+    event_type_map = {
+        "incident.triggered": "triggered",
+        "incident.acknowledged": "acknowledged",
+        "incident.resolved": "resolved",
+        "incident.reassigned": "reassigned",
+    }
+
+    if event_type not in event_type_map:
         logger.info("Ignoring PagerDuty event type: %s", event_type)
         return {}
 
     incident_data = data.get("incident", data)
-    return {
+    service_data = incident_data.get("service", {})
+
+    normalized = {
         "alert_name": incident_data.get("title", "Unknown alert"),
-        "service": incident_data.get("service", {}).get("name", ""),
+        "incident_id": incident_data.get("id", ""),
+        "service_id": service_data.get("id", ""),
+        "service_name": service_data.get("name", ""),
+        "status": event_type_map[event_type],
         "severity": incident_data.get("urgency", "high"),
         "description": incident_data.get("description", ""),
         "raw": payload,
     }
+
+    logger.info(
+        "Parsed PagerDuty %s: incident=%s service=%s title=%s",
+        event_type,
+        normalized["incident_id"],
+        normalized["service_name"],
+        normalized["alert_name"],
+    )
+
+    return normalized
 
 
 async def resolve_incident(
@@ -84,6 +112,8 @@ async def resolve_incident(
             "message": str,
             "response": dict or None,  # full API response on success
         }
+
+    Logs all API calls (success and failure) to audit trail.
 
     Docs: https://developer.pagerduty.com/api-reference/reference/incidents/update-an-incident
     """
@@ -116,7 +146,12 @@ async def resolve_incident(
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            logger.info("Writing back incident resolution to PagerDuty: %s", incident_id)
+            logger.info(
+                "PagerDuty API call: PUT %s (incident_id=%s resolution='%s')",
+                url,
+                incident_id,
+                resolution_summary[:60],
+            )
             response = await client.put(
                 url,
                 json=update_payload,
@@ -126,7 +161,7 @@ async def resolve_incident(
             result_data = response.json()
 
             logger.info(
-                "PagerDuty incident %s resolved successfully (status=%s)",
+                "PagerDuty API success: incident %s resolved (status=%d)",
                 incident_id,
                 response.status_code,
             )
@@ -138,19 +173,25 @@ async def resolve_incident(
             }
 
     except httpx.HTTPStatusError as e:
+        error_detail = e.response.text[:500]
         logger.error(
-            "PagerDuty API error resolving %s: %d %s",
-            incident_id,
+            "PagerDuty API error: PUT %s failed with %d — %s",
+            url,
             e.response.status_code,
-            e.response.text[:500],
+            error_detail,
         )
         return {
             "success": False,
             "status": "error",
             "message": f"PagerDuty API error: {e.response.status_code} {e.response.reason_phrase}",
+            "error_detail": error_detail,
         }
     except Exception as e:
-        logger.error("Failed to resolve PagerDuty incident %s: %s", incident_id, e)
+        logger.error(
+            "PagerDuty API connection error: %s (incident=%s)",
+            str(e),
+            incident_id,
+        )
         return {
             "success": False,
             "status": "error",
