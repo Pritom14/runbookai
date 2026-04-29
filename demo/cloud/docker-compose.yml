@@ -1,0 +1,76 @@
+version: "3.8"
+
+services:
+  # RunbookAI Cloud (orchestrator)
+  cloud:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    environment:
+      # LLM Configuration
+      LLM_BASE_URL: http://ollama:11434/v1
+      LLM_MODEL: qwen2.5:7b
+      LLM_API_KEY: ollama
+      # Database
+      DATABASE_URL: sqlite+aiosqlite:///./runbookai.db
+      # Cloud Features
+      CLOUD_ENABLED: "true"
+      CLOUD_API_BASE_URL: http://localhost:7000
+      # Other settings
+      DEMO_MODE: "true"
+      SUGGEST_MODE: "false"
+    ports:
+      - "7000:7000"  # Cloud API
+    volumes:
+      - ./runbookai.db:/app/runbookai.db
+    depends_on:
+      - ollama
+    command: python -c "from runbookai.main import start; start()"
+
+  # Local Ollama (LLM provider)
+  ollama:
+    image: ollama/ollama:latest
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Demo Agent (customer VPC simulation)
+  demo-agent:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    environment:
+      # Cloud Configuration
+      RUNBOOKAI_API_KEY: sk_demo_agent_token_12345
+      RUNBOOKAI_CLOUD_URL: http://cloud:7000
+      # Note: In real deployment, this would be a different customer's API key
+    depends_on:
+      cloud:
+        condition: service_healthy
+    # In real deployment, agent would run in customer's VPC
+    # For demo, we run it locally and connect to cloud service
+    command: >
+      python -c "
+      import asyncio
+      from runbookai.agent.cloud_agent import CloudAgent
+      agent = CloudAgent(
+          api_key='sk_demo_agent_token_12345',
+          cloud_url='http://cloud:7000'
+      )
+      asyncio.run(agent.start())
+      "
+
+volumes:
+  ollama_data:
+
+networks:
+  default:
+    name: runbookai-cloud-demo
