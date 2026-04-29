@@ -201,26 +201,82 @@ async def send_slack_notification(
     event: str,
     incident: Any,
     extra: dict[str, Any] | None = None,
-) -> None:
+) -> dict[str, Any]:
     """Post a Slack Block Kit message for an incident lifecycle event.
 
-    No-ops if SLACK_WEBHOOK_URL is not configured.
+    Supported events:
+    - incident_started: Alert triggered, agent starting
+    - approval_needed: Agent requesting approval for high-risk action
+    - approval_granted: Human approved action, agent continuing
+    - approval_rejected: Human rejected action, stopping
+    - incident_resolved: Agent resolved the incident
+    - incident_escalated: Agent could not resolve, escalating
+
+    Args:
+        event: Event type (incident_started, incident_resolved, etc.)
+        incident: Incident object with id, alert_name, status, etc.
+        extra: Additional context (tool, rationale, reason, etc.)
+
+    Returns:
+        {
+            "success": bool,
+            "status": str,  # "ok", "skipped", or "error"
+            "message": str,
+        }
+
+    No-ops gracefully if SLACK_WEBHOOK_URL is not configured.
     Never raises — Slack failures must not break the agent loop.
     """
     if not settings.slack_webhook_url:
-        return
+        logger.debug("SLACK_WEBHOOK_URL not configured — skipping notification")
+        return {
+            "success": True,
+            "status": "skipped",
+            "message": "Slack webhook not configured",
+        }
+
     try:
         blocks = _build_blocks(event, incident, extra)
         payload = {"blocks": blocks}
         async with httpx.AsyncClient(timeout=10.0) as client:
+            logger.info(
+                "Slack API call: POST webhook (event=%s incident=%s alert=%s)",
+                event,
+                incident.id,
+                incident.alert_name[:60],
+            )
             resp = await client.post(settings.slack_webhook_url, json=payload)
             if resp.status_code != 200:
-                logger.warning(
-                    "slack notification returned %s: %s", resp.status_code, resp.text[:200]
+                logger.error(
+                    "Slack API error: webhook returned %s — %s",
+                    resp.status_code,
+                    resp.text[:200],
                 )
+                return {
+                    "success": False,
+                    "status": "error",
+                    "message": f"Slack webhook error: {resp.status_code}",
+                }
             else:
-                logger.info("slack notification sent: event=%s incident=%s", event, incident.id)
-    except Exception:
-        logger.exception(
-            "failed to send slack notification: event=%s incident=%s", event, incident.id
+                logger.info(
+                    "Slack API success: notification sent (event=%s incident=%s)",
+                    event,
+                    incident.id,
+                )
+                return {
+                    "success": True,
+                    "status": "ok",
+                    "message": f"Slack notification sent for {event}",
+                }
+    except Exception as e:
+        logger.error(
+            "Slack API connection error: %s (event=%s incident=%s)",
+            str(e),
+            event,
+            incident.id,
         )
+        return {
+            "success": False,
+            "status": "error",
+            "message": f"Connection error: {str(e)}",
+        }

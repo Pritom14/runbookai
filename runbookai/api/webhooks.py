@@ -14,6 +14,7 @@ from runbookai.database import AsyncSessionLocal, get_session
 from runbookai.integrations.pagerduty import parse_pagerduty_payload, verify_signature as verify_pagerduty_signature
 from runbookai.integrations.datadog import parse_datadog_payload
 from runbookai.integrations.grafana import parse_grafana_payload, verify_signature as verify_grafana_signature
+from runbookai.integrations.slack_integration import test_webhook as test_slack_webhook
 from runbookai.models import AgentAction, Incident, IncidentStatus
 
 logger = logging.getLogger("runbookai.api.webhooks")
@@ -357,3 +358,27 @@ async def grafana_webhook(
         "incident_id": incident.id,
         "grafana_alert_uid": normalized.get("alert_uid", ""),
     }
+
+
+@router.post("/slack/test")
+async def slack_test_webhook():
+    """Test Slack webhook connectivity.
+
+    Posts a test message to verify the configured SLACK_WEBHOOK_URL is working.
+    Requires SLACK_WEBHOOK_URL to be set in config.
+
+    Returns:
+        {
+            "success": bool,
+            "status": str,
+            "message": str,
+        }
+    """
+    from runbookai.config import settings
+
+    result = await test_slack_webhook(settings.slack_webhook_url)
+    if result["success"]:
+        logger.info("Slack webhook test passed")
+    else:
+        logger.error("Slack webhook test failed: %s", result["message"])
+    return result
