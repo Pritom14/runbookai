@@ -1,0 +1,16 @@
+name: demo-app-thermal
+alert_pattern: "thermal"
+description: "Respond to thermal alerts on demo app"
+steps:
+  - name: "read_bmc_sensors"
+    tool: "read_bmc_sensors"
+    retry: 2
+  - name: "check_critical_temp"
+    condition: "cpu_temp > 85"
+    then: "escalate_to_fan_override"
+  - name: "escalate_to_fan_override"
+    tool: "fan_override"
+    params:
+      level: "full"
+  - name: "finish"
+    action: "resolve"

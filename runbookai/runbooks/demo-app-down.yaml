@@ -1,0 +1,22 @@
+name: demo-app-down
+alert_pattern: "service down"
+description: "Respond to service down alerts on demo app"
+steps:
+  - name: "check_logs"
+    tool: "check_logs"
+    params:
+      service: "demo-app"
+      lines: 50
+  - name: "restart_service"
+    tool: "ssh_execute"
+    params:
+      host: "localhost"
+      command: "systemctl restart demo-app"
+    retry: 2
+  - name: "verify_service"
+    tool: "http_check"
+    params:
+      url: "http://localhost:8080/health"
+      timeout: 5
+  - name: "finish"
+    action: "resolve"

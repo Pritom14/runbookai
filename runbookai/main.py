@@ -7,12 +7,14 @@ from fastapi.staticfiles import StaticFiles
 
 from runbookai.api.analysis import router as analysis_router
 from runbookai.api.approvals import router as approvals_router
+from runbookai.api.bmc import router as bmc_router
 from runbookai.api.hosts import router as hosts_router
 from runbookai.api.incidents import router as incidents_router
 from runbookai.api.postmortem import router as postmortem_router
 from runbookai.api.runbooks import router as runbooks_router
 from runbookai.api.webhooks import router as webhooks_router
 from runbookai.database import init_db
+from runbookai.runbook_loader import load_runbooks_from_disk
 
 app = FastAPI(
     title="RunbookAI",
@@ -22,6 +24,7 @@ app = FastAPI(
 
 app.include_router(webhooks_router)
 app.include_router(approvals_router)
+app.include_router(bmc_router)
 # analysis and postmortem must be registered before incidents so
 # /incidents/analysis and /incidents/{id}/postmortem are not captured
 # by the /incidents/{incident_id} wildcard route.
@@ -37,6 +40,7 @@ app.mount("/static", StaticFiles(directory=_static), name="static")
 @app.on_event("startup")
 async def startup_event() -> None:
     await init_db()
+    await load_runbooks_from_disk()
 
 
 @app.get("/health")
