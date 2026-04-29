@@ -5,6 +5,7 @@ import pathlib
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from runbookai.api.agents import router as agents_router
 from runbookai.api.analysis import router as analysis_router
 from runbookai.api.approvals import router as approvals_router
 from runbookai.api.bmc import router as bmc_router
@@ -23,6 +24,7 @@ app = FastAPI(
     version="0.1.0",
 )
 
+app.include_router(agents_router)
 app.include_router(customers_router)
 app.include_router(webhooks_router)
 app.include_router(approvals_router)

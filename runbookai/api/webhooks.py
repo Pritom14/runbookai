@@ -10,6 +10,8 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from runbookai.cloud.auth import get_customer_from_api_key
+from runbookai.cloud.routing import route_incident_to_customer
 from runbookai.database import AsyncSessionLocal, get_session
 from runbookai.integrations.pagerduty import parse_pagerduty_payload, verify_signature as verify_pagerduty_signature
 from runbookai.integrations.datadog import parse_datadog_payload
@@ -86,6 +88,7 @@ async def pagerduty_webhook(
     background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_session),
     x_pagerduty_signature: str = Header(default=""),
+    x_api_key: str = Header(default=""),
 ):
     """Receive a PagerDuty v3 webhook, create an Incident, kick off the agent.
 
@@ -94,6 +97,11 @@ async def pagerduty_webhook(
 
     For triggered events: creates a new RunbookAI incident and starts the agent.
     For other event types: logs but doesn't create incident (handled by PagerDuty callbacks).
+
+    Optional header:
+        X-API-Key: Customer API key for cloud routing.
+                   If provided, incident is routed to customer's agent.
+                   If not provided, processed as non-cloud incident.
     """
     from runbookai.config import settings
 
@@ -106,6 +114,16 @@ async def pagerduty_webhook(
     normalized = parse_pagerduty_payload(payload)
     if not normalized:
         return {"status": "ignored"}
+
+    # Resolve customer if API key provided
+    customer_id: Optional[str] = None
+    if x_api_key:
+        customer = await get_customer_from_api_key(x_api_key, session)
+        if customer:
+            customer_id = customer.id
+        else:
+            logger.warning("Invalid API key in PagerDuty webhook: %s", x_api_key[:20])
+            raise HTTPException(status_code=401, detail="Invalid API key")
 
     # Only create incidents for triggered events; other events are informational
     event_type = normalized.get("status", "")
@@ -126,6 +144,7 @@ async def pagerduty_webhook(
     # Create incident for triggered events
     incident = Incident(
         id=str(uuid.uuid4()),
+        customer_id=customer_id,
         source="pagerduty",
         alert_name=normalized["alert_name"],
         alert_body=payload,
@@ -134,18 +153,30 @@ async def pagerduty_webhook(
     await session.commit()
     await session.refresh(incident)
 
+    # Route incident to customer's agent if applicable
+    if customer_id:
+        await route_incident_to_customer(
+            customer_id,
+            incident.id,
+            payload,
+            session,
+        )
+        await session.commit()
+
     background_tasks.add_task(run_agent_for_incident, incident.id)
     logger.info(
-        "PagerDuty incident triggered: %s (pd_id=%s service=%s runbookai_id=%s)",
+        "PagerDuty incident triggered: %s (pd_id=%s service=%s runbookai_id=%s customer_id=%s)",
         normalized["alert_name"],
         normalized.get("incident_id", "?"),
         normalized.get("service_name", "?"),
         incident.id,
+        customer_id or "none",
     )
     return {
         "status": "accepted",
         "alert_name": normalized["alert_name"],
         "incident_id": incident.id,
+        "customer_id": customer_id,
         "pagerduty_incident_id": normalized.get("incident_id", ""),
         "service": normalized.get("service_name", ""),
     }
@@ -164,6 +195,7 @@ async def generic_webhook(
     payload: GenericWebhookPayload,
     background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_session),
+    x_api_key: str = Header(default=""),
 ):
     """Receive a generic alert payload.
 
@@ -173,10 +205,25 @@ async def generic_webhook(
     Optional fields:
         description, host, service, severity.
 
+    Optional header:
+        X-API-Key: Customer API key for cloud routing.
+                   If provided, incident is routed to customer's agent.
+                   If not provided, processed as non-cloud incident.
+
     Returns 422 if required fields are missing.
     """
     alert_name = payload.alert_name
     service = payload.service
+
+    # Resolve customer if API key provided
+    customer_id: Optional[str] = None
+    if x_api_key:
+        customer = await get_customer_from_api_key(x_api_key, session)
+        if customer:
+            customer_id = customer.id
+        else:
+            logger.warning("Invalid API key in webhook: %s", x_api_key[:20])
+            raise HTTPException(status_code=401, detail="Invalid API key")
 
     is_regression, prior_id, prior_summary = await detect_regression(session, service)
     if is_regression:
@@ -186,6 +233,7 @@ async def generic_webhook(
 
     incident = Incident(
         id=str(uuid.uuid4()),
+        customer_id=customer_id,
         source="generic",
         alert_name=alert_name,
         alert_body=payload.model_dump(),
@@ -196,13 +244,29 @@ async def generic_webhook(
     await session.commit()
     await session.refresh(incident)
 
+    # Route incident to customer's agent if applicable
+    if customer_id:
+        await route_incident_to_customer(
+            customer_id,
+            incident.id,
+            payload.model_dump(),
+            session,
+        )
+        await session.commit()
+
     background_tasks.add_task(run_agent_for_incident, incident.id)
-    logger.info("Generic alert received: %s incident_id=%s regression=%s",
-                alert_name, incident.id, is_regression)
+    logger.info(
+        "Generic alert received: %s incident_id=%s customer_id=%s regression=%s",
+        alert_name,
+        incident.id,
+        customer_id or "none",
+        is_regression,
+    )
     return {
         "status": "accepted",
         "alert_name": alert_name,
         "incident_id": incident.id,
+        "customer_id": customer_id,
         "possible_regression": is_regression,
         "prior_incident_id": prior_id,
     }
@@ -212,13 +276,26 @@ async def hardware_webhook(
     request: Request,
     background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_session),
+    x_api_key: str = Header(default=""),
 ):
     payload = await request.json()
     alert_name = payload.get("title", payload.get("alert_name", "Unknown hardware alert"))
     service = payload.get("service", "")
+
+    # Resolve customer if API key provided
+    customer_id: Optional[str] = None
+    if x_api_key:
+        customer = await get_customer_from_api_key(x_api_key, session)
+        if customer:
+            customer_id = customer.id
+        else:
+            logger.warning("Invalid API key in hardware webhook: %s", x_api_key[:20])
+            raise HTTPException(status_code=401, detail="Invalid API key")
+
     is_regression, prior_id, prior_summary = await detect_regression(session, service)
     incident = Incident(
         id=str(uuid.uuid4()),
+        customer_id=customer_id,
         source="hardware",
         alert_name=alert_name,
         alert_body=payload,
@@ -228,12 +305,24 @@ async def hardware_webhook(
     session.add(incident)
     await session.commit()
     await session.refresh(incident)
+
+    # Route incident to customer's agent if applicable
+    if customer_id:
+        await route_incident_to_customer(
+            customer_id,
+            incident.id,
+            payload,
+            session,
+        )
+        await session.commit()
+
     background_tasks.add_task(run_agent_for_incident, incident.id)
-    logger.info("Hardware alert received: %s incident_id=%s", alert_name, incident.id)
+    logger.info("Hardware alert received: %s incident_id=%s customer_id=%s", alert_name, incident.id, customer_id or "none")
     return {
         "status": "accepted",
         "alert_name": alert_name,
         "incident_id": incident.id,
+        "customer_id": customer_id,
         "possible_regression": is_regression,
         "prior_incident_id": prior_id,
     }
@@ -244,15 +333,31 @@ async def datadog_webhook(
     request: Request,
     background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_session),
+    x_api_key: str = Header(default=""),
 ):
     """Receive a Datadog monitor webhook, create an Incident, kick off the agent.
 
     Only processes "alert" status (not "recovery" which is handled by callbacks).
+
+    Optional header:
+        X-API-Key: Customer API key for cloud routing.
+                   If provided, incident is routed to customer's agent.
+                   If not provided, processed as non-cloud incident.
     """
     payload = await request.json()
     normalized = parse_datadog_payload(payload)
     if not normalized:
         return {"status": "ignored"}
+
+    # Resolve customer if API key provided
+    customer_id: Optional[str] = None
+    if x_api_key:
+        customer = await get_customer_from_api_key(x_api_key, session)
+        if customer:
+            customer_id = customer.id
+        else:
+            logger.warning("Invalid API key in Datadog webhook: %s", x_api_key[:20])
+            raise HTTPException(status_code=401, detail="Invalid API key")
 
     # Only create incidents for alert status; recovery is logged but not actioned
     status = normalized.get("status", "")
@@ -272,6 +377,7 @@ async def datadog_webhook(
     # Create incident for alert status
     incident = Incident(
         id=str(uuid.uuid4()),
+        customer_id=customer_id,
         source="datadog",
         alert_name=normalized["alert_name"],
         alert_body=payload,
@@ -280,17 +386,29 @@ async def datadog_webhook(
     await session.commit()
     await session.refresh(incident)
 
+    # Route incident to customer's agent if applicable
+    if customer_id:
+        await route_incident_to_customer(
+            customer_id,
+            incident.id,
+            payload,
+            session,
+        )
+        await session.commit()
+
     background_tasks.add_task(run_agent_for_incident, incident.id)
     logger.info(
-        "Datadog alert received: %s (monitor=%s runbookai_id=%s)",
+        "Datadog alert received: %s (monitor=%s runbookai_id=%s customer_id=%s)",
         normalized["alert_name"],
         normalized.get("monitor_id", "?"),
         incident.id,
+        customer_id or "none",
     )
     return {
         "status": "accepted",
         "alert_name": normalized["alert_name"],
         "incident_id": incident.id,
+        "customer_id": customer_id,
         "datadog_monitor_id": normalized.get("monitor_id", ""),
     }
 
@@ -301,11 +419,17 @@ async def grafana_webhook(
     background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_session),
     x_grafana_signature: str = Header(default=""),
+    x_api_key: str = Header(default=""),
 ):
     """Receive a Grafana alert webhook, verify signature, create an Incident.
 
     Verifies HMAC-SHA256 signature using GRAFANA_WEBHOOK_SECRET.
     Only processes "firing" status (not "resolved" which is handled by callbacks).
+
+    Optional header:
+        X-API-Key: Customer API key for cloud routing.
+                   If provided, incident is routed to customer's agent.
+                   If not provided, processed as non-cloud incident.
     """
     from runbookai.config import settings
 
@@ -318,6 +442,16 @@ async def grafana_webhook(
     normalized = parse_grafana_payload(payload)
     if not normalized:
         return {"status": "ignored"}
+
+    # Resolve customer if API key provided
+    customer_id: Optional[str] = None
+    if x_api_key:
+        customer = await get_customer_from_api_key(x_api_key, session)
+        if customer:
+            customer_id = customer.id
+        else:
+            logger.warning("Invalid API key in Grafana webhook: %s", x_api_key[:20])
+            raise HTTPException(status_code=401, detail="Invalid API key")
 
     # Only create incidents for firing status; resolved is logged but not actioned
     status = normalized.get("status", "")
@@ -337,6 +471,7 @@ async def grafana_webhook(
     # Create incident for firing status
     incident = Incident(
         id=str(uuid.uuid4()),
+        customer_id=customer_id,
         source="grafana",
         alert_name=normalized["alert_name"],
         alert_body=payload,
@@ -345,17 +480,29 @@ async def grafana_webhook(
     await session.commit()
     await session.refresh(incident)
 
+    # Route incident to customer's agent if applicable
+    if customer_id:
+        await route_incident_to_customer(
+            customer_id,
+            incident.id,
+            payload,
+            session,
+        )
+        await session.commit()
+
     background_tasks.add_task(run_agent_for_incident, incident.id)
     logger.info(
-        "Grafana alert received: %s (alert_uid=%s runbookai_id=%s)",
+        "Grafana alert received: %s (alert_uid=%s runbookai_id=%s customer_id=%s)",
         normalized["alert_name"],
         normalized.get("alert_uid", "?")[:16],
         incident.id,
+        customer_id or "none",
     )
     return {
         "status": "accepted",
         "alert_name": normalized["alert_name"],
         "incident_id": incident.id,
+        "customer_id": customer_id,
         "grafana_alert_uid": normalized.get("alert_uid", ""),
     }
 
