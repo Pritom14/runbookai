@@ -27,11 +27,12 @@ echo 'Opening browser...'
 open http://localhost:7000/static/chaos-board.html 2>/dev/null || xdg-open http://localhost:7000/static/chaos-board.html 2>/dev/null || echo 'Open http://localhost:7000/static/chaos-board.html in your browser'
 
 echo 'Starting chaos demo...'
-ATTACK="${1:-Hardware temp}"
+SEQUENCE="${1:-Hardware temp,Process kill,Disk fill}"
+DELAY="${2:-8}"
 if [ -x ".venv/bin/python" ]; then
-  .venv/bin/python demo/chaos/chaos.py --only "$ATTACK"
+  .venv/bin/python demo/chaos/chaos.py --sequence "$SEQUENCE" --delay "$DELAY"
 else
-  python3 demo/chaos/chaos.py --only "$ATTACK"
+  python3 demo/chaos/chaos.py --sequence "$SEQUENCE" --delay "$DELAY"
 fi
 
 echo 'Demo complete. Cleaning up...'

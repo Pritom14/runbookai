@@ -329,6 +329,7 @@
       <span class="cost-counter" id="costCounter">$0 — system healthy</span>
     </div>
     <div class="header-right">
+      <a id="replayBtn" href="#" target="_blank" style="display:none;padding:6px 14px;background:#6366f1;color:#fff;border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;margin-right:12px;letter-spacing:0.05em;">▶ VIEW REPLAY</a>
       <div class="health-pill">
         <div class="health-dot" id="healthDot"></div>
         <span id="healthStatus">HEALTHY</span>
@@ -455,12 +456,7 @@
             .then(r => r.json())
             .then(inc => {
               if (inc.created_at && inc.resolved_at) {
-                const created = new Date(inc.created_at).getTime();
-                const resolved = new Date(inc.resolved_at).getTime();
-                const elapsed = Math.max((resolved - created) / 1000, 1);
-                const automatedCost = elapsed * costPerSecond;
-                const saved = Math.max(manualResponseCost - automatedCost, 0);
-                animateRecoveryCounter(Math.max(peakRisk, automatedCost), saved);
+                animateRecoveryCounter(peakRisk, peakRisk);
               }
             })
             .catch(() => {
@@ -587,6 +583,11 @@
             replayOpenScheduled = false;
             lastFeedEventCount = 0;
             document.getElementById('agentFeed').innerHTML = '';
+            const counterEl = document.getElementById('costCounter');
+            counterEl.removeAttribute('data-frozen-cost');
+            counterEl.classList.remove('recovered', 'active');
+            counterEl.textContent = '$0 — system healthy';
+            document.getElementById('replayBtn').style.display = 'none';
             pollIncidentReplay();
           }
 
@@ -599,8 +600,10 @@
           ) {
             replayOpenScheduled = true;
             setTimeout(() => {
-              window.location.href = `${API_BASE}/incidents/${incident.id}/replay/ui`;
-            }, 9000);
+              const btn = document.getElementById('replayBtn');
+              btn.href = `${API_BASE}/incidents/${incident.id}/replay/ui`;
+              btn.style.display = 'inline-block';
+            }, 3000);
           }
 
           updateHealthPill(incidentActive);

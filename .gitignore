@@ -15,3 +15,4 @@ build/
 demo/ssh_keys/
 demo/chaos/keys/
 graphify-out/
+demo/chaos/run.log

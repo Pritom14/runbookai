@@ -150,7 +150,9 @@ def main():
         default="demo-app",
         help="Container name (default: demo-app)",
     )
-    parser.add_argument("--only", default=None, help="Run only a specific attack")
+    parser.add_argument("--only", default=None, help="Run only attacks matching this substring")
+    parser.add_argument("--sequence", default=None, help="Comma-separated attack names to run in order (e.g. 'Hardware temp,Process kill,Disk fill')")
+    parser.add_argument("--delay", type=int, default=60, help="Seconds to wait between attacks (default: 60)")
     parser.add_argument("--loop", action="store_true", help="Restart attacks after #12")
     parser.add_argument("--shuffle", action="store_true", help="Randomize attack order with --loop")
     parser.add_argument("--duration", type=int, default=None, help="Stop after N minutes")
@@ -163,13 +165,25 @@ def main():
 
     container_name = args.container
     only_attack = args.only
+    sequence = args.sequence
+    inter_attack_delay = args.delay
     loop = args.loop
     shuffle = args.shuffle
     duration = args.duration * 60 if args.duration else None
     server_url = args.server
 
     attacks = ATTACKS
-    if only_attack:
+    if sequence:
+        names = [n.strip().lower() for n in sequence.split(",")]
+        ordered = []
+        for name in names:
+            match = next((a for a in ATTACKS if name in a['name'].lower()), None)
+            if match:
+                ordered.append(match)
+            else:
+                print(f"Warning: no attack matching '{name}'")
+        attacks = ordered
+    elif only_attack:
         attacks = [attack for attack in attacks if only_attack.lower() in attack['name'].lower()]
     if shuffle:
         import random
@@ -211,6 +225,20 @@ def main():
                     )
                     logging.error(error)
                     print(error)
+                else:
+                    incident_id = response.json().get("incident_id")
+                    if incident_id:
+                        print(f"Waiting for incident {incident_id[:8]} to resolve...")
+                        for _ in range(90):
+                            time.sleep(1)
+                            try:
+                                r = requests.get(f"{server_url}/incidents/{incident_id}", timeout=5)
+                                status = r.json().get("status", "")
+                                if status in ("resolved", "escalated"):
+                                    print(f"Incident {incident_id[:8]} {status} after {_+1}s")
+                                    break
+                            except Exception:
+                                pass
             except requests.RequestException as e:
                 logging.error(f"Failed to send alert for {attack['name']}: {e}")
                 print(f"Failed to send alert for {attack['name']}: {e}")
@@ -234,7 +262,7 @@ def main():
 
             is_last_attack = index == len(attacks) - 1
             if loop or not is_last_attack:
-                time.sleep(60)  # Wait for 60 seconds between attacks
+                time.sleep(inter_attack_delay)
         if not loop:
             break
 

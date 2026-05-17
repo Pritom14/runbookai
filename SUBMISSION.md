@@ -70,16 +70,16 @@ If using Ollama:
 ollama pull qwen2.5:7b
 ```
 
-Run the default single-incident demo:
+Run the default 3-incident demo (Hardware thermal → Service down → Disk fill):
 
 ```bash
 bash demo/chaos/run.sh
 ```
 
-To run a different scripted incident, pass part of the scenario name:
+To run a single specific incident:
 
 ```bash
-bash demo/chaos/run.sh "CPU spike"
+bash demo/chaos/run.sh "Hardware temp"
 ```
 
 Open:
