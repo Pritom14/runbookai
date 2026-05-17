@@ -322,7 +322,8 @@
 
 <script>
 const urlParams = new URLSearchParams(window.location.search);
-const INCIDENT_ID = urlParams.get('id') || "";
+const pathMatch = window.location.pathname.match(/\/incidents\/([^/]+)\/replay\/ui$/);
+const INCIDENT_ID = urlParams.get('id') || (pathMatch ? pathMatch[1] : "");
 
 const ATTACK_CMDS = {
   "demo-app CPU high":             "stress-ng --cpu 4 --timeout 30s",

@@ -22,11 +22,17 @@ class RunbookCreate(BaseModel):
 
 @router.post("", status_code=201)
 async def create_runbook(body: RunbookCreate, session: AsyncSession = Depends(get_session)):
-    rb = Runbook(name=body.name, alert_pattern=body.alert_pattern, content=body.content)
-    session.add(rb)
+    result = await session.execute(select(Runbook).where(Runbook.name == body.name))
+    rb = result.scalars().first()
+    if rb:
+        rb.alert_pattern = body.alert_pattern
+        rb.content = body.content
+    else:
+        rb = Runbook(name=body.name, alert_pattern=body.alert_pattern, content=body.content)
+        session.add(rb)
     await session.commit()
     await session.refresh(rb)
-    logger.info("runbook created: id=%s name=%s", rb.id, rb.name)
+    logger.info("runbook upserted: id=%s name=%s", rb.id, rb.name)
     return _serialize(rb)
 
 

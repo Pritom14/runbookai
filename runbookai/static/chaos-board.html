@@ -57,6 +57,11 @@
       font-weight: 600;
     }
 
+    .cost-counter.recovered {
+      color: #34d399;
+      font-weight: 600;
+    }
+
     .header-right {
       display: flex;
       align-items: center;
@@ -406,11 +411,16 @@
 
   <script>
     const API_BASE = window.location.origin;
+    const params = new URLSearchParams(window.location.search);
+    const autoReplay = params.get('autoReplay') === '1';
     let currentIncidentId = null;
     let incidentStartTime = null;
     let incidentActive = false;
     let lastFeedEventCount = 0;
     let lastIncidentStatus = null;
+    let peakRisk = 0;
+    let recoveryAnimationStarted = false;
+    let replayOpenScheduled = false;
 
     const attackConfig = {
       'cpu-spike': { alert_name: 'demo-app CPU high', bmc_action: null },
@@ -428,36 +438,65 @@
     function updateCostCounter() {
       const counterEl = document.getElementById('costCounter');
       const costPerSecond = 300000 / 3600;
+      const manualResponseSeconds = 300;
+      const manualResponseCost = manualResponseSeconds * costPerSecond;
 
       if (incidentActive && incidentStartTime) {
         const elapsed = (Date.now() - incidentStartTime) / 1000;
         const cost = elapsed * costPerSecond;
-        counterEl.textContent = `$${formatCost(cost)} lost`;
+        peakRisk = Math.max(peakRisk, cost);
+        counterEl.textContent = `$${formatCost(cost)} at risk`;
         counterEl.classList.add('active');
+        counterEl.classList.remove('recovered');
       } else if (!incidentActive && lastIncidentStatus === 'resolved' && currentIncidentId) {
-        // Use incident's actual resolved time, not current time
-        if (!counterEl.dataset.frozenCost) {
+        if (!recoveryAnimationStarted && !counterEl.dataset.frozenCost) {
+          recoveryAnimationStarted = true;
           fetch(`${API_BASE}/incidents/${currentIncidentId}`)
             .then(r => r.json())
             .then(inc => {
               if (inc.created_at && inc.resolved_at) {
                 const created = new Date(inc.created_at).getTime();
                 const resolved = new Date(inc.resolved_at).getTime();
-                const elapsed = (resolved - created) / 1000;
-                const cost = elapsed * costPerSecond;
-                counterEl.textContent = `Incident cost: $${formatCost(cost)} — recovered`;
-                counterEl.dataset.frozenCost = 'true';
-                counterEl.classList.remove('active');
+                const elapsed = Math.max((resolved - created) / 1000, 1);
+                const automatedCost = elapsed * costPerSecond;
+                const saved = Math.max(manualResponseCost - automatedCost, 0);
+                animateRecoveryCounter(Math.max(peakRisk, automatedCost), saved);
               }
             })
-            .catch(() => {});
+            .catch(() => {
+              recoveryAnimationStarted = false;
+            });
         }
       } else if (!incidentActive) {
         counterEl.textContent = '$0 — system healthy';
         counterEl.classList.remove('active');
+        counterEl.classList.remove('recovered');
         counterEl.removeAttribute('data-frozen-cost');
         incidentStartTime = null;
+        peakRisk = 0;
+        recoveryAnimationStarted = false;
+        replayOpenScheduled = false;
       }
+    }
+
+    function animateRecoveryCounter(startRisk, saved) {
+      const counterEl = document.getElementById('costCounter');
+      const started = Date.now();
+      const durationMs = 5000;
+      counterEl.classList.remove('active');
+      counterEl.classList.add('recovered');
+
+      const timer = setInterval(() => {
+        const progress = Math.min((Date.now() - started) / durationMs, 1);
+        const remainingRisk = startRisk * (1 - progress);
+        if (progress < 1) {
+          counterEl.textContent = `$${formatCost(remainingRisk)} risk remaining`;
+        } else {
+          clearInterval(timer);
+          counterEl.textContent = `Saved $${formatCost(saved)} — automated recovery`;
+          counterEl.dataset.frozenCost = 'true';
+        }
+      }, 100);
     }
 
     function updateHealthPill(isActive) {
@@ -479,11 +518,12 @@
         if (!response.ok) return;
         const data = await response.json();
 
-        updateSensorRow('cpuTempVal', 'cpuTempStatus', 'cpuTempRow', data.CPU_Temp);
-        updateSensorRow('fan1Val', 'fan1Status', 'fan1Row', data.Fan1_RPM, 'RPM');
-        updateSensorRow('fan2Val', 'fan2Status', 'fan2Row', data.Fan2_RPM, 'RPM');
-        updateSensorRow('psu1VoltageVal', 'psu1VoltageStatus', 'psu1VoltageRow', data.PSU1_Voltage, 'V');
-        updateSensorRow('psu1PowerVal', 'psu1PowerStatus', 'psu1PowerRow', data.PSU1_Power, 'W');
+        const sensors = data.sensors || {};
+        updateSensorRow('cpuTempVal', 'cpuTempStatus', 'cpu-temp-row', sensors.CPU_Temp);
+        updateSensorRow('fan1Val', 'fan1Status', 'fan1-row', sensors.Fan1_RPM, 'RPM');
+        updateSensorRow('fan2Val', 'fan2Status', 'fan2-row', sensors.Fan2_RPM, 'RPM');
+        updateSensorRow('psu1VoltageVal', 'psu1VoltageStatus', 'psu1-voltage-row', sensors.PSU1_Voltage, 'V');
+        updateSensorRow('psu1PowerVal', 'psu1PowerStatus', 'psu1-power-row', sensors.PSU1_Power, 'W');
       } catch (e) {
         console.log('BMC poll error:', e.message);
       }
@@ -542,9 +582,25 @@
 
           if (!wasActive && incidentActive) {
             incidentStartTime = Date.now();
+            peakRisk = 0;
+            recoveryAnimationStarted = false;
+            replayOpenScheduled = false;
             lastFeedEventCount = 0;
             document.getElementById('agentFeed').innerHTML = '';
             pollIncidentReplay();
+          }
+
+          if (
+            autoReplay &&
+            wasActive &&
+            !incidentActive &&
+            incident.status === 'resolved' &&
+            !replayOpenScheduled
+          ) {
+            replayOpenScheduled = true;
+            setTimeout(() => {
+              window.location.href = `${API_BASE}/incidents/${incident.id}/replay/ui`;
+            }, 9000);
           }
 
           updateHealthPill(incidentActive);
@@ -565,7 +621,9 @@
       const lastIncidentEl = document.getElementById('lastIncident');
       const badges = {
         'resolved': 'badge-resolved',
-        'firing': 'badge-firing',
+        'pending': 'badge-firing',
+        'in_progress': 'badge-firing',
+        'waiting_approval': 'badge-firing',
         'escalated': 'badge-escalated'
       };
       const badgeClass = badges[incident.status] || 'badge-firing';
@@ -614,7 +672,8 @@
         feed.innerHTML = '';
       }
 
-      const timestamp = event.timestamp_offset ? `[+${event.timestamp_offset.toFixed(1)}s]` : '[+0.0s]';
+      const offset = event.timestamp_offset ?? event.t_seconds ?? 0;
+      const timestamp = `[+${Number(offset).toFixed(1)}s]`;
       const div = document.createElement('div');
       div.className = 'feed-event';
 
@@ -635,8 +694,10 @@
       } else if (event.event === 'experience_saved') {
         text = `Experience saved to memory`;
       } else if (event.tool_name === 'read_bmc_sensors') {
-        if (event.output && event.output.CPU_Temp) {
-          text = `read_bmc_sensors → CPU ${event.output.CPU_Temp}°C, Fans OK`;
+        const sensors = event.output && event.output.sensors ? event.output.sensors : {};
+        if (sensors.CPU_Temp) {
+          const critical = event.output.any_critical ? `, critical: ${event.output.critical_alerts.join('; ')}` : '';
+          text = `read_bmc_sensors → CPU ${sensors.CPU_Temp.value}°C, Fan1 ${sensors.Fan1_RPM.value}RPM${critical}`;
         } else {
           text = `read_bmc_sensors → ${event.output ? event.output.status || 'ok' : 'ok'}`;
         }
@@ -665,8 +726,23 @@
       if (!config) return;
 
       try {
+        if (config.bmc_action) {
+          console.log(`[ATTACK] Triggering BMC action: ${config.bmc_action}`);
+          const bmcResponse = await fetch(`${API_BASE}/bmc/control?action=${config.bmc_action}`, {
+            method: 'POST'
+          });
+          console.log(`[ATTACK] BMC response status: ${bmcResponse.status}`);
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
+
         console.log(`[ATTACK] Firing ${attackType}: alert_name="${config.alert_name}"`);
-        const payload = { alert_name: config.alert_name };
+        const payload = {
+          alert_name: config.alert_name,
+          host: 'web-01',
+          service: config.alert_name.startsWith('Hardware:') ? 'rack-01' : 'demo-app',
+          severity: 'critical',
+          description: `Injected ${attackType} demo failure`
+        };
         console.log(`[ATTACK] Webhook payload:`, JSON.stringify(payload));
 
         const response = await fetch(`${API_BASE}/webhooks/generic`, {
@@ -681,14 +757,6 @@
         if (!response.ok) {
           console.error(`[ATTACK] Webhook returned ${response.status}:`, responseText);
           return false;
-        }
-
-        if (config.bmc_action) {
-          console.log(`[ATTACK] Triggering BMC action: ${config.bmc_action}`);
-          const bmcResponse = await fetch(`${API_BASE}/bmc/control?action=${config.bmc_action}`, {
-            method: 'POST'
-          });
-          console.log(`[ATTACK] BMC response status: ${bmcResponse.status}`);
         }
 
         return response.ok;

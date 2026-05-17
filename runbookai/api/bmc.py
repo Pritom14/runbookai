@@ -40,10 +40,9 @@ async def _get_real_sensors() -> dict[str, Any] | None:
     try:
         # python-ipmi library provides IPMI operations
         import ipmi
-        from ipmi.impi import ImpiError
 
         logger.debug("Attempting IPMI connection to BMC at %s", settings.bmc_ip)
-        interface = ipmi.create_interface(
+        ipmi.create_interface(
             interface_type="lanplus",
             host=settings.bmc_ip,
             username=settings.bmc_username,
@@ -52,17 +51,14 @@ async def _get_real_sensors() -> dict[str, Any] | None:
 
         # Read sensor readings via IPMI
         # This is a simplified version — real deployments would parse SDR records
-        sensors_dict = {
-            "timestamp": time.time(),
-            "mode": "real",
-            "sensors": {},
-        }
-
         # Try to read common thermal sensors
         try:
             # Note: This is pseudocode. Actual python-ipmi usage is more complex
             # For now, we'll return None to fall back to emulated
-            logger.info("Real IPMI sensor read from %s (not yet fully implemented)", settings.bmc_ip)
+            logger.info(
+                "Real IPMI sensor read from %s (not yet fully implemented)",
+                settings.bmc_ip,
+            )
             return None  # Fallback to emulated for now
         except Exception as e:
             logger.warning("Failed to read IPMI sensors from BMC: %s", e)
@@ -99,8 +95,9 @@ def _compute_sensors() -> dict[str, Any]:
     mode = _state["mode"]
     elapsed = time.time() - _state["mode_started_at"]
 
-    # Auto-exit failure modes after 25 seconds (incident should resolve by then)
-    if mode in ("thermal_failure", "fan_failure") and elapsed > 25:
+    # Keep demo failures active long enough for slower local LLMs to inspect
+    # sensors. Recovery should come from fan_override or manual reset.
+    if mode in ("thermal_failure", "fan_failure") and elapsed > 300:
         _state["mode"] = "healthy"
         _state["mode_started_at"] = time.time()
         mode = "healthy"

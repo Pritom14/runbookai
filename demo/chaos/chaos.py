@@ -2,16 +2,19 @@
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import subprocess
-import sys
 import time
-import requests
 from typing import Any, Dict, List
 
+import requests
+
 # Configure logging
-logging.basicConfig(filename='demo/chaos/run.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    filename="demo/chaos/run.log",
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
 
 # Define the ATTACKS list
 ATTACKS: List[Dict[str, Any]] = [
@@ -64,6 +67,7 @@ ATTACKS: List[Dict[str, Any]] = [
             "host": "web-01",
             "severity": "critical",
             "url": "/webhooks/hardware",
+            "bmc_action": "thermal_failure",
             "value": "92C"
         }
     },
@@ -141,12 +145,20 @@ ATTACKS: List[Dict[str, Any]] = [
 
 def main():
     parser = argparse.ArgumentParser(description="RunbookAI Chaos Attack Orchestrator")
-    parser.add_argument('--container', default='demo-app', help='Container name (default: demo-app)')
-    parser.add_argument('--only', default=None, help='Run only a specific attack')
-    parser.add_argument('--loop', action='store_true', help='Restart attacks after #12')
-    parser.add_argument('--shuffle', action='store_true', help='Randomize attack order with --loop')
-    parser.add_argument('--duration', type=int, default=None, help='Stop after N minutes')
-    parser.add_argument('--server', default='http://localhost:7000', help='RunbookAI server (default: http://localhost:7000)')
+    parser.add_argument(
+        "--container",
+        default="demo-app",
+        help="Container name (default: demo-app)",
+    )
+    parser.add_argument("--only", default=None, help="Run only a specific attack")
+    parser.add_argument("--loop", action="store_true", help="Restart attacks after #12")
+    parser.add_argument("--shuffle", action="store_true", help="Randomize attack order with --loop")
+    parser.add_argument("--duration", type=int, default=None, help="Stop after N minutes")
+    parser.add_argument(
+        "--server",
+        default="http://localhost:7000",
+        help="RunbookAI server (default: http://localhost:7000)",
+    )
     args = parser.parse_args()
 
     container_name = args.container
@@ -165,21 +177,40 @@ def main():
 
     start_time = time.time()
     while True:
-        for attack in attacks:
+        for index, attack in enumerate(attacks):
             if duration and time.time() - start_time > duration:
                 break
             logging.info(f"Starting attack: {attack['name']}")
             print(f"Starting attack: {attack['name']}")
+            if attack['inject_cmd']:
+                try:
+                    subprocess.run(
+                        f"docker exec {container_name} sh -c '{attack['inject_cmd']}'",
+                        shell=True,
+                        check=True,
+                    )
+                except subprocess.CalledProcessError as e:
+                    logging.error(f"Failed to run attack {attack['name']}: {e}")
+                    print(f"Failed to run attack {attack['name']}: {e}")
             try:
-                subprocess.run(f"docker exec {container_name} sh -c '{attack['inject_cmd']}'", shell=True, check=True)
-            except subprocess.CalledProcessError as e:
-                logging.error(f"Failed to run attack {attack['name']}: {e}")
-                print(f"Failed to run attack {attack['name']}: {e}")
-            try:
-                response = requests.post(f"{server_url}/webhooks/generic", json=attack['alert_payload'])
+                payload = dict(attack['alert_payload'])
+                webhook_path = payload.pop("url", "/webhooks/generic")
+                bmc_action = payload.pop("bmc_action", None)
+                if bmc_action:
+                    requests.post(
+                        f"{server_url}/bmc/control",
+                        params={"action": bmc_action},
+                        timeout=5,
+                    )
+                    time.sleep(0.3)
+                response = requests.post(f"{server_url}{webhook_path}", json=payload)
                 if response.status_code != 200:
-                    logging.error(f"Failed to send alert for {attack['name']}: {response.status_code} {response.text}")
-                    print(f"Failed to send alert for {attack['name']}: {response.status_code} {response.text}")
+                    error = (
+                        f"Failed to send alert for {attack['name']}: "
+                        f"{response.status_code} {response.text}"
+                    )
+                    logging.error(error)
+                    print(error)
             except requests.RequestException as e:
                 logging.error(f"Failed to send alert for {attack['name']}: {e}")
                 print(f"Failed to send alert for {attack['name']}: {e}")
@@ -193,11 +224,17 @@ def main():
                     "tc qdisc del dev eth0 root 2>/dev/null; true",  # Remove network latency
                 ]
                 for cleanup_cmd in cleanup_cmds:
-                    subprocess.run(f"docker exec {container_name} sh -c '{cleanup_cmd}'", shell=True, check=False)
+                    subprocess.run(
+                        f"docker exec {container_name} sh -c '{cleanup_cmd}'",
+                        shell=True,
+                        check=False,
+                    )
             except Exception as e:
                 logging.debug(f"Cleanup error (non-fatal): {e}")
 
-            time.sleep(60)  # Wait for 60 seconds between attacks
+            is_last_attack = index == len(attacks) - 1
+            if loop or not is_last_attack:
+                time.sleep(60)  # Wait for 60 seconds between attacks
         if not loop:
             break
 

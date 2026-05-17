@@ -10,11 +10,9 @@ The agent can run in the customer's VPC or locally for testing.
 """
 
 import asyncio
-import json
 import logging
 import os
 import sys
-from datetime import datetime
 from typing import Optional
 
 import httpx
@@ -68,11 +66,10 @@ class CloudAgent:
         Returns True if successful.
         """
         try:
-            async with httpx.AsyncClient() as client:
-                # TODO: Phase 3.2 — add /api/auth endpoint to resolve API key to customer
-                # For now, we'll extract customer_id from agent handshake
-                logger.info("Cloud authentication pending: Phase 3.2 implementation")
-                return True
+            # TODO: Phase 3.2 — add /api/auth endpoint to resolve API key to customer.
+            # For now, we'll extract customer_id from agent handshake.
+            logger.info("Cloud authentication pending: Phase 3.2 implementation")
+            return True
         except Exception as e:
             logger.error("Authentication failed: %s", e)
             return False

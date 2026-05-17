@@ -10,7 +10,6 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Optional
 
 import click
 
@@ -99,7 +98,7 @@ def start() -> None:
     cloud_url = cfg.get("cloud_url", "https://runbookai.cloud")
     mcp_port = cfg.get("mcp_port", 7777)
 
-    click.echo(f"Starting RunbookAI cloud agent...")
+    click.echo("Starting RunbookAI cloud agent...")
     click.echo(f"  Cloud: {cloud_url}")
     click.echo(f"  MCP Port: {mcp_port}")
     click.echo("")

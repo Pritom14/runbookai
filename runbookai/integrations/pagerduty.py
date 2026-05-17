@@ -8,9 +8,7 @@ Also provides functions to write back incident resolution to PagerDuty API.
 
 import hashlib
 import hmac
-import json
 import logging
-from typing import Optional
 
 import httpx
 

@@ -3,14 +3,12 @@
 import logging
 import secrets
 import uuid
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from runbookai.cloud.auth import get_customer_from_api_key
 from runbookai.database import get_session
 from runbookai.models import Customer
 

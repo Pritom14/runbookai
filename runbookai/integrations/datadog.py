@@ -36,8 +36,6 @@ def parse_datadog_payload(payload: dict) -> dict:
 
     Returns empty dict if payload format is unexpected.
     """
-    # Extract alert info
-    alert = payload.get("alert", {})
     trigger = payload.get("trigger", {})
 
     monitor_id = str(payload.get("id", ""))

@@ -2,14 +2,13 @@
 
 import logging
 import pathlib
-from typing import Optional
 
 import yaml
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from runbookai.models import Runbook
 from runbookai.database import AsyncSessionLocal
+from runbookai.models import Runbook
 
 logger = logging.getLogger("runbookai.runbook_loader")
 
@@ -68,7 +67,12 @@ async def _load_single_runbook(session: AsyncSession, yaml_file: pathlib.Path) -
         runbook.alert_pattern = alert_pattern
         runbook.content = content
         await session.commit()
-        logger.info("Updated runbook: name=%s alert_pattern=%s file=%s", name, alert_pattern, yaml_file.name)
+        logger.info(
+            "Updated runbook: name=%s alert_pattern=%s file=%s",
+            name,
+            alert_pattern,
+            yaml_file.name,
+        )
     else:
         # Create new runbook
         runbook = Runbook(
@@ -78,4 +82,9 @@ async def _load_single_runbook(session: AsyncSession, yaml_file: pathlib.Path) -
         )
         session.add(runbook)
         await session.commit()
-        logger.info("Loaded runbook: name=%s alert_pattern=%s file=%s", name, alert_pattern, yaml_file.name)
+        logger.info(
+            "Loaded runbook: name=%s alert_pattern=%s file=%s",
+            name,
+            alert_pattern,
+            yaml_file.name,
+        )

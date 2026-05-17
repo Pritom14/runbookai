@@ -13,3 +13,5 @@ build/
 *.db
 *.sqlite
 demo/ssh_keys/
+demo/chaos/keys/
+graphify-out/

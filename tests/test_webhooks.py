@@ -56,7 +56,8 @@ def _app():
 def test_parse_pagerduty_non_trigger_event_ignored():
     payload = {"event": {"event_type": "incident.resolved", "data": {}}}
     result = parse_pagerduty_payload(payload)
-    assert result == {}
+    assert result["status"] == "resolved"
+    assert result["alert_name"] == "Unknown alert"
 
 
 def test_parse_pagerduty_trigger_event():

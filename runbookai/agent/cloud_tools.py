@@ -12,7 +12,6 @@ Each tool is authenticated via the customer's VPC network isolation
 (agent only has access to customer's infrastructure).
 """
 
-import asyncio
 import logging
 from typing import Any, Dict, Optional
 

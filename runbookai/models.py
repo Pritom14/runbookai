@@ -33,7 +33,11 @@ class Incident(Base):
     __tablename__ = "incidents"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    customer_id: Mapped[Optional[str]] = mapped_column(ForeignKey("customers.id"), nullable=True, index=True)
+    customer_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("customers.id"),
+        nullable=True,
+        index=True,
+    )
     source: Mapped[str] = mapped_column(String)  # "pagerduty" | "generic"
     alert_name: Mapped[str] = mapped_column(String)
     alert_body: Mapped[dict] = mapped_column(JSON)
@@ -132,7 +136,11 @@ class Customer(Base):
     api_key: Mapped[str] = mapped_column(String, unique=True, index=True)
     email: Mapped[str] = mapped_column(String, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
 
     incidents: Mapped[list["Incident"]] = relationship(back_populates="customer")
     agents: Mapped[list["Agent"]] = relationship(back_populates="customer")
@@ -155,7 +163,11 @@ class Agent(Base):
     last_heartbeat: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
 
     customer: Mapped["Customer"] = relationship(back_populates="agents")
 
@@ -190,14 +202,25 @@ class Postmortem(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     incident_id: Mapped[str] = mapped_column(ForeignKey("incidents.id"), index=True)
-    customer_id: Mapped[Optional[str]] = mapped_column(ForeignKey("customers.id"), nullable=True, index=True)
+    customer_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("customers.id"),
+        nullable=True,
+        index=True,
+    )
     markdown_content: Mapped[str] = mapped_column(Text)  # raw markdown uploaded by customer
     root_cause: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # extracted root cause
-    remediation_steps: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)  # extracted steps
+    remediation_steps: Mapped[Optional[list]] = mapped_column(
+        JSON,
+        nullable=True,
+    )  # extracted steps
     timeline: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # structured timeline
     lessons: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)  # key lessons as strings
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
 
     incident: Mapped["Incident"] = relationship()
     customer: Mapped[Optional["Customer"]] = relationship()
@@ -217,9 +240,16 @@ class RunbookVersion(Base):
     runbook_id: Mapped[str] = mapped_column(ForeignKey("runbooks.id"), index=True)
     version: Mapped[int] = mapped_column(default=1)  # version number
     content: Mapped[str] = mapped_column(Text)  # full runbook content at this version
-    incident_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)  # incident that prompted this change
-    change_description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # what changed and why
-    previous_content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # previous version for diff
+    # Incident that prompted this change.
+    incident_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+    change_description: Mapped[Optional[str]] = mapped_column(
+        Text,
+        nullable=True,
+    )  # what changed and why
+    previous_content: Mapped[Optional[str]] = mapped_column(
+        Text,
+        nullable=True,
+    )  # previous version for diff
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     runbook: Mapped["Runbook"] = relationship()

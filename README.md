@@ -6,6 +6,31 @@ Autonomous incident response agent. Gets paged → reads the runbook → acts �
 
 No more 3am pages for problems your runbook already solves.
 
+## HYKR MVP Review
+
+This submission demonstrates RunbookAI through a local Docker chaos demo: the API receives an alert, matches a runbook, runs diagnostics/remediation against a sandbox target, and shows the full AgentTrace replay.
+
+- Repository: https://github.com/Pritom14/runbookai
+- Technical submission notes: [SUBMISSION.md](SUBMISSION.md)
+- Demo dashboard after local startup: `http://localhost:7000/static/chaos-board.html`
+- Replay UI after an incident: `http://localhost:7000/incidents/{incident_id}/replay/ui`
+
+Reviewer quickstart:
+
+```bash
+git clone https://github.com/Pritom14/runbookai
+cd runbookai
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+cp .env.example .env
+bash demo/chaos/run.sh
+```
+
+By default this runs one representative hardware incident. Pass a scenario name such as `"CPU spike"` to run a different scripted incident.
+
+Note: `demo/chaos/keys/` contains auto-generated throwaway SSH keys for the local Docker demo container only. They do not grant access to any external system and are excluded from future commits. Run `demo/chaos/setup.sh` on a fresh clone to regenerate them.
+
 ## How it works
 
 1. Alert arrives via PagerDuty or generic webhook

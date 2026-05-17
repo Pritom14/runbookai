@@ -1,5 +1,6 @@
 """Webhook receivers — entry point for incoming alerts."""
 
+import asyncio
 import logging
 import uuid
 from datetime import datetime, timedelta
@@ -13,9 +14,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from runbookai.cloud.auth import get_customer_from_api_key
 from runbookai.cloud.routing import route_incident_to_customer
 from runbookai.database import AsyncSessionLocal, get_session
-from runbookai.integrations.pagerduty import parse_pagerduty_payload, verify_signature as verify_pagerduty_signature
 from runbookai.integrations.datadog import parse_datadog_payload
-from runbookai.integrations.grafana import parse_grafana_payload, verify_signature as verify_grafana_signature
+from runbookai.integrations.grafana import parse_grafana_payload
+from runbookai.integrations.grafana import verify_signature as verify_grafana_signature
+from runbookai.integrations.pagerduty import parse_pagerduty_payload
+from runbookai.integrations.pagerduty import verify_signature as verify_pagerduty_signature
 from runbookai.integrations.slack_integration import test_webhook as test_slack_webhook
 from runbookai.models import AgentAction, Incident, IncidentStatus
 
@@ -82,6 +85,95 @@ async def run_agent_for_incident(incident_id: str) -> None:
             logger.exception("incident=%s background agent raised", incident_id)
 
 
+async def remediate_hardware_incident(session: AsyncSession, incident: Incident) -> None:
+    """Run deterministic hardware remediation and record replay actions."""
+    from runbookai.api.bmc import fan_override, get_sensors
+
+    incident.status = IncidentStatus.IN_PROGRESS
+    await session.commit()
+
+    session.add(
+        AgentAction(
+            incident_id=incident.id,
+            tool_name="_event",
+            tool_input={"event": "runbook_matched"},
+            tool_output={"alert_name": incident.alert_name, "runbook": "hardware-thermal"},
+            duration_ms=0,
+        )
+    )
+
+    sensors = await get_sensors()
+    critical_alerts = [
+        f"{name}: {sensor['value']}{sensor['unit']} CRITICAL"
+        for name, sensor in sensors.get("sensors", {}).items()
+        if sensor.get("status") == "critical"
+    ]
+    read_output = {
+        "status": "ok",
+        "mode": sensors.get("mode", "unknown"),
+        "sensors": sensors.get("sensors", {}),
+        "critical_alerts": critical_alerts,
+        "any_critical": bool(critical_alerts),
+    }
+    session.add(
+        AgentAction(
+            incident_id=incident.id,
+            tool_name="read_bmc_sensors",
+            tool_input={"host": incident.alert_body.get("host", "localhost")},
+            tool_output=read_output,
+            duration_ms=0,
+        )
+    )
+
+    summary = "Hardware sensors checked; no critical thermal state found."
+    if critical_alerts:
+        fan_output = await fan_override(speed_percent=100)
+        session.add(
+            AgentAction(
+                incident_id=incident.id,
+                tool_name="fan_override",
+                tool_input={"speed_percent": 100},
+                tool_output=fan_output,
+                duration_ms=0,
+            )
+        )
+        summary = "Critical thermal state remediated with BMC fan override."
+
+    incident.status = IncidentStatus.RESOLVED
+    incident.resolved_at = datetime.utcnow()
+    incident.summary = summary
+    session.add(
+        AgentAction(
+            incident_id=incident.id,
+            tool_name="_event",
+            tool_input={"event": "resolved"},
+            tool_output={"summary": summary},
+            duration_ms=0,
+        )
+    )
+    await session.commit()
+    logger.info("incident=%s hardware demo remediation resolved", incident.id)
+
+
+async def run_hardware_agent_for_incident(incident_id: str, delay_seconds: float = 0) -> None:
+    """Deterministic hardware demo remediation.
+
+    The HYKR demo needs the thermal flow to resolve even when the local LLM is
+    unavailable or slow. This records the same replayable actions the agent
+    would take: read BMC sensors, override fans if critical, then resolve.
+    """
+    if delay_seconds > 0:
+        await asyncio.sleep(delay_seconds)
+
+    async with AsyncSessionLocal() as session:
+        incident = await session.get(Incident, incident_id)
+        if not incident:
+            logger.warning("incident=%s hardware run skipped; incident not found", incident_id)
+            return
+
+        await remediate_hardware_incident(session, incident)
+
+
 @router.post("/pagerduty")
 async def pagerduty_webhook(
     request: Request,
@@ -106,7 +198,11 @@ async def pagerduty_webhook(
     from runbookai.config import settings
 
     raw_body = await request.body()
-    if not verify_pagerduty_signature(raw_body, x_pagerduty_signature, settings.pagerduty_webhook_secret):
+    if not verify_pagerduty_signature(
+        raw_body,
+        x_pagerduty_signature,
+        settings.pagerduty_webhook_secret,
+    ):
         logger.warning("PagerDuty webhook signature verification failed")
         raise HTTPException(status_code=401, detail="Invalid signature")
 
@@ -299,6 +395,7 @@ async def hardware_webhook(
         source="hardware",
         alert_name=alert_name,
         alert_body=payload,
+        status=IncidentStatus.IN_PROGRESS,
         possible_regression=is_regression,
         prior_incident_id=prior_id,
     )
@@ -316,8 +413,13 @@ async def hardware_webhook(
         )
         await session.commit()
 
-    background_tasks.add_task(run_agent_for_incident, incident.id)
-    logger.info("Hardware alert received: %s incident_id=%s customer_id=%s", alert_name, incident.id, customer_id or "none")
+    background_tasks.add_task(run_hardware_agent_for_incident, incident.id, 6)
+    logger.info(
+        "Hardware alert received: %s incident_id=%s customer_id=%s",
+        alert_name,
+        incident.id,
+        customer_id or "none",
+    )
     return {
         "status": "accepted",
         "alert_name": alert_name,

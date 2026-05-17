@@ -42,7 +42,7 @@ sleep 3
 
 # Step 9: Test SSH connection
 for i in {1..3}; do
-    if ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no -p 2222 root@localhost 'echo READY'; then
+    if ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2222 root@localhost 'echo READY'; then
         break
     fi
     if [ $i -eq 3 ]; then
@@ -61,7 +61,7 @@ with open('demo/chaos/keys/demo_key', 'r') as f:
     private_key = f.read()
 
 payload = json.dumps({
-    'hostname': 'web-01',
+    'hostname': 'localhost',
     'username': 'root',
     'port': 2222,
     'private_key_pem': private_key
@@ -79,7 +79,7 @@ python3 << 'PYTHON_EOF'
 import json
 import subprocess
 import os
-import re
+import yaml
 
 for filename in os.listdir('demo/chaos/runbooks/'):
     if not filename.endswith('.yaml'):
@@ -89,12 +89,9 @@ for filename in os.listdir('demo/chaos/runbooks/'):
     with open(filepath, 'r') as f:
         content = f.read()
 
-    # Manual parsing: extract alert_pattern and content via regex
-    alert_pattern_match = re.search(r"alert_pattern:\s*['\"](.+?)['\"]", content)
-    content_match = re.search(r"content:\s*['\"](.+?)['\"]", content, re.DOTALL)
-
-    alert_pattern = alert_pattern_match.group(1) if alert_pattern_match else ''
-    content_text = content_match.group(1) if content_match else ''
+    data = yaml.safe_load(content) or {}
+    alert_pattern = data.get('alert_pattern', '')
+    content_text = data.get('content', '')
 
     payload = json.dumps({
         'name': filename.replace('.yaml', ''),

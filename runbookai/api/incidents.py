@@ -4,14 +4,14 @@ import logging
 import pathlib
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import HTMLResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from runbookai.cloud.auth import get_customer_from_api_key
 from runbookai.database import get_session
-from runbookai.models import AgentAction, Customer, Incident
+from runbookai.models import AgentAction, Incident
 
 logger = logging.getLogger("runbookai.api.incidents")
 router = APIRouter(prefix="/incidents", tags=["incidents"])
@@ -149,6 +149,30 @@ async def get_incident_replay(
 
     base_time = actions[0].created_at if actions else incident.created_at
 
+    timeline = []
+    for action in actions:
+        t_seconds = int((action.created_at - base_time).total_seconds())
+        event_name = None
+        if action.tool_name == "_event":
+            event_name = (action.tool_input or {}).get("event", "event")
+
+        step = {
+            "t_seconds": t_seconds,
+            "timestamp_offset": float(t_seconds),
+            "tool": action.tool_name,
+            "tool_name": None if action.tool_name == "_event" else action.tool_name,
+            "event": event_name,
+            "input": action.tool_input,
+            "output": action.tool_output,
+            "duration_ms": action.duration_ms,
+            "timestamp": action.created_at,
+        }
+
+        if event_name and isinstance(action.tool_output, dict):
+            step.update(action.tool_output)
+
+        timeline.append(step)
+
     return {
         "incident_id": incident_id,
         "alert_name": incident.alert_name,
@@ -157,15 +181,5 @@ async def get_incident_replay(
         "resolved_at": incident.resolved_at,
         "summary": incident.summary,
         "customer_id": incident.customer_id,
-        "timeline": [
-            {
-                "t_seconds": int((a.created_at - base_time).total_seconds()),
-                "tool": a.tool_name,
-                "input": a.tool_input,
-                "output": a.tool_output,
-                "duration_ms": a.duration_ms,
-                "timestamp": a.created_at,
-            }
-            for a in actions
-        ],
+        "timeline": timeline,
     }

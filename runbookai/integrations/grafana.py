@@ -9,7 +9,6 @@ Docs: https://grafana.com/docs/grafana/latest/alerting/manage-alerts/manage-stat
 import hashlib
 import hmac
 import logging
-from typing import Optional
 
 import httpx
 

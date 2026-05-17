@@ -1,19 +1,16 @@
 """Integration tests for Phase 2 webhooks (PagerDuty, Datadog, Grafana, Slack)."""
 
-import json
 import hashlib
 import hmac
-from datetime import datetime
-from typing import Optional
+import json
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
-from runbookai.main import app
 from runbookai.database import Base, get_session
-from runbookai.models import Incident
+from runbookai.main import app
 
 
 @pytest.fixture
@@ -23,10 +20,10 @@ async def test_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    SessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    session_local = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     async def override_get_session():
-        async with SessionLocal() as session:
+        async with session_local() as session:
             yield session
 
     app.dependency_overrides[get_session] = override_get_session

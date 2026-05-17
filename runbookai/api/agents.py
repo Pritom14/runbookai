@@ -9,12 +9,11 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from runbookai.cloud.routing import mark_agent_online, mark_agent_offline, mark_agent_error
 from runbookai.database import get_session
 from runbookai.models import Agent, Customer
 
@@ -295,7 +294,9 @@ async def list_customer_agents(
                 "agent_id": agent.id,
                 "name": agent.name,
                 "status": agent.status,
-                "last_heartbeat": agent.last_heartbeat.isoformat() if agent.last_heartbeat else None,
+                "last_heartbeat": (
+                    agent.last_heartbeat.isoformat() if agent.last_heartbeat else None
+                ),
                 "created_at": agent.created_at.isoformat(),
             }
             for agent in agents

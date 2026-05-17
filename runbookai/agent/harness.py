@@ -32,7 +32,6 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Optional
 
 from runbookai.agent.suggest_mode import RESOLVED, SuggestModeAgent
@@ -408,7 +407,11 @@ class AgentHarness:
         return _DEFAULT_RUNBOOK
 
     async def _escalate(
-        self, session: Any, incident: Any, reason: str, recorder: Optional[AgentTraceRecorder] = None
+        self,
+        session: Any,
+        incident: Any,
+        reason: str,
+        recorder: Optional[AgentTraceRecorder] = None,
     ) -> None:
         """Mark incident as escalated and send an email notification if configured."""
         incident.status = IncidentStatus.ESCALATED
@@ -458,7 +461,10 @@ class AgentHarness:
         crystallize into beliefs.
         """
         if not _SOMA_AVAILABLE:
-            logger.info("incident=%s soma-memory not available, skipping experience record", self.incident_id)
+            logger.info(
+                "incident=%s soma-memory not available, skipping experience record",
+                self.incident_id,
+            )
             return
 
         try:
@@ -624,7 +630,10 @@ class AgentHarness:
         from runbookai.integrations.datadog import post_event
 
         event_title = f"Incident Resolved: {incident.alert_name}"
-        event_text = f"RunbookAI resolved incident for monitor {dd_monitor_id}.\n\nSummary: {resolution_summary}"
+        event_text = (
+            f"RunbookAI resolved incident for monitor {dd_monitor_id}."
+            f"\n\nSummary: {resolution_summary}"
+        )
         tags = [
             f"runbookai:incident_id:{self.incident_id}",
             f"datadog:monitor_id:{dd_monitor_id}",
@@ -815,4 +824,3 @@ _DEFAULT_RUNBOOK = """\
 4. Verify recovery with another health check.
 5. Call finish() with a summary.
 """
-

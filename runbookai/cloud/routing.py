@@ -6,7 +6,6 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from runbookai.cloud.auth import get_customer_from_api_key
 from runbookai.models import Agent, Customer, PendingIncident
 
 logger = logging.getLogger("runbookai.cloud.routing")

@@ -216,7 +216,8 @@ class SuggestModeAgent:
                     tool_input = tool_json.get("arguments", {})
                     tool_use_id = str(uuid.uuid4())  # Generate ID for fallback case.
                     logger.info(
-                        "incident=%s parsed tool call from content fallback: %s (normalized from %s)",
+                        "incident=%s parsed tool call from content fallback: %s "
+                        "(normalized from %s)",
                         self.incident_id,
                         tool_name,
                         tool_json["name"],

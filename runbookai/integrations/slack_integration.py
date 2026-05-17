@@ -7,7 +7,6 @@ Requires SLACK_WEBHOOK_URL in config. No-ops gracefully if not set.
 """
 
 import logging
-from typing import Optional
 
 import httpx
 

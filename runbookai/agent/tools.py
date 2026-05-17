@@ -577,14 +577,18 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         "description": (
             "Override BMC fan speed to cool an overheating system. "
             "Call this when CPU temperature exceeds the critical threshold (85 C). "
-            "The BMC will ramp fans to maximum and gradually restore normal speed once temperature drops."
+            "The BMC will ramp fans to maximum and gradually restore normal speed "
+            "once temperature drops."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
                 "speed_percent": {
                     "type": "integer",
-                    "description": "Fan speed override percentage (1-100). Default 100 (maximum cooling).",
+                    "description": (
+                        "Fan speed override percentage (1-100). "
+                        "Default 100 (maximum cooling)."
+                    ),
                     "default": 100,
                 },
             },
