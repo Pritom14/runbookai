@@ -256,3 +256,5 @@ SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
 ## License
 
 Apache 2.0
+
+telemetry funnel verification touched here
