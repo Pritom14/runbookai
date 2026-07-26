@@ -1,10 +1,32 @@
 # RunbookAI
 
 ![CI](https://github.com/Pritom14/runbookai/actions/workflows/ci.yml/badge.svg)
+![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)
+![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)
 
 Autonomous incident response agent. Gets paged → reads the runbook → acts → resolves or escalates.
 
 No more 3am pages for problems your runbook already solves.
+
+## Contents
+
+- [Business Use Case](#business-use-case)
+- [HYKR MVP Review](#hykr-mvp-review)
+- [How it works](#how-it-works)
+- [Architecture](#architecture)
+- [Quickstart](#quickstart)
+- [Register SSH credentials](#register-ssh-credentials)
+- [Suggest Mode (default)](#suggest-mode-default)
+- [Tools](#tools)
+- [Hardware Integration](#hardware-integration)
+- [Runbooks](#runbooks)
+- [LLM](#llm)
+- [Database](#database)
+- [Slack notifications](#slack-notifications)
+- [API](#api)
+- [Testing](#testing)
+- [Further reading](#further-reading)
+- [License](#license)
 
 ## Business Use Case
 
@@ -76,6 +98,24 @@ Every action is logged to the **AgentTrace** replay timeline — see exactly wha
 **Regression detection:** if the same service alerts again within 6 hours of a prior remediation, the agent is warned not to repeat the last fix — it digs deeper to find the root cause.
 
 After resolution, a **postmortem draft** is auto-generated from the trace: full timeline, actions taken, regression analysis, and recommended follow-ups.
+
+## Architecture
+
+RunbookAI is a FastAPI application with an incident-response engine behind it:
+
+- `runbookai/main.py` — starts the API, loads routers, serves static dashboards, initializes the database, loads on-disk runbooks
+- `runbookai/api/` — webhook, incident, replay, runbook, approval, host, BMC, customer, and dashboard routes
+- `runbookai/agent/` — the agent loop (`harness.py`), tool implementations (`tools.py`), Suggest Mode approval logic, the IPMI hardware poller, and cloud-agent pieces
+- `runbookai/trace/` — records every tool call and decision for AgentTrace replay
+- `runbookai/brain/` — parses AgentTrace timelines into postmortem drafts
+- `runbookai/integrations/` — PagerDuty, Datadog, Grafana, and Slack clients
+- `runbookai/cloud/` — auth and incident-routing pieces for the managed cloud service
+- `runbookai/models.py` / `runbookai/database.py` — SQLite by default, PostgreSQL-compatible persistence
+- `runbookai/static/` — `chaos-board.html` (demo dashboard) and `replay.html` (AgentTrace replay UI)
+- `runbooks/` — YAML runbook definitions loaded on startup
+- `demo/chaos/` — local Docker chaos target, demo runbooks, and scripted failure injection used by the HYKR MVP review
+
+For a deeper walkthrough of the MVP demo path, see [SUBMISSION.md](SUBMISSION.md).
 
 ## Quickstart
 
@@ -284,6 +324,28 @@ SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
 | `POST /api/hosts` | Register SSH credentials for a host |
 | `GET /api/hosts` | List registered hosts |
 | `DELETE /api/hosts/{hostname}` | Remove host credentials |
+
+## Testing
+
+```bash
+pip install -e ".[dev]"
+ruff check runbookai tests
+pytest --cov=runbookai --cov-report=term-missing -q
+```
+
+For manual, end-to-end verification of each monitoring integration (PagerDuty, Datadog, Grafana, Slack), see [INTEGRATION_TESTING.md](INTEGRATION_TESTING.md).
+
+## Further reading
+
+| Doc | What's in it |
+|---|---|
+| [SUBMISSION.md](SUBMISSION.md) | HYKR MVP submission notes: architecture, tech stack, verification steps, known limitations |
+| [INTEGRATION_TESTING.md](INTEGRATION_TESTING.md) | Manual test guide for PagerDuty, Datadog, Grafana, and Slack integrations |
+| [docs/CLOUD_ARCHITECTURE.md](docs/CLOUD_ARCHITECTURE.md) | Managed cloud service design — VPC agent, control plane, SSE routing |
+| [docs/CLOUD_DEPLOYMENT_GUIDE.md](docs/CLOUD_DEPLOYMENT_GUIDE.md) | Deploying RunbookAI as a managed cloud service |
+| [docs/CLOUD_ONBOARDING.md](docs/CLOUD_ONBOARDING.md) | Connecting a customer VPC agent to RunbookAI cloud |
+| [docs/CLOUD_ROUTING_ARCHITECTURE.md](docs/CLOUD_ROUTING_ARCHITECTURE.md) | How cloud incidents route to the correct customer agent |
+| [docs/PRICING_MODELS_TODO.md](docs/PRICING_MODELS_TODO.md) | Status of cloud pricing/billing — deferred pending validation |
 
 ## License
 
