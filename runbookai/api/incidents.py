@@ -30,6 +30,8 @@ async def list_incidents(
     If no API key: returns all non-cloud incidents (customer_id is NULL).
     """
     customer_id: Optional[str] = None
+    has_api_key = bool(x_api_key)
+    logger.info("list_incidents: limit=%d offset=%d has_api_key=%s", limit, offset, has_api_key)
 
     # If API key provided, filter by customer
     if x_api_key:
@@ -83,8 +85,10 @@ async def get_incident(
     If X-API-Key provided: only accessible if customer matches API key.
     If no API key: only accessible if incident is non-cloud (customer_id is NULL).
     """
+    logger.info("get_incident: incident_id=%s has_api_key=%s", incident_id, bool(x_api_key))
     incident = await session.get(Incident, incident_id)
     if incident is None:
+        logger.warning("get_incident: incident not found: %s", incident_id)
         raise HTTPException(status_code=404, detail="Incident not found")
 
     # Check customer isolation
@@ -126,8 +130,10 @@ async def get_incident_replay(
 
     With customer isolation: only accessible with proper API key.
     """
+    logger.info("get_incident_replay: incident_id=%s has_api_key=%s", incident_id, bool(x_api_key))
     incident = await session.get(Incident, incident_id)
     if incident is None:
+        logger.warning("get_incident_replay: incident not found: %s", incident_id)
         raise HTTPException(status_code=404, detail="Incident not found")
 
     # Check customer isolation

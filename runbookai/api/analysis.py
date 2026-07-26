@@ -7,6 +7,7 @@ Endpoints:
 
 from __future__ import annotations
 
+import logging
 from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Any
@@ -18,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from runbookai.database import get_session
 from runbookai.models import AgentAction, Incident
 
+logger = logging.getLogger("runbookai.api.analysis")
 router = APIRouter(prefix="/incidents", tags=["analysis"])
 
 _REMEDIATION_TOOLS = {"restart_service", "clear_disk", "scale_service"}
@@ -33,6 +35,7 @@ async def incident_analysis(
     Groups incidents by service, detects regressions, calculates MTTR,
     and surfaces the most commonly used tools.
     """
+    logger.info("incident_analysis: lookback_hours=%d", hours)
     cutoff = datetime.utcnow() - timedelta(hours=hours)
     result = await session.execute(
         select(Incident)
@@ -122,11 +125,13 @@ async def compare_incidents(
     whether incident B is a regression of incident A, and key
     differences in tool outputs (latency, connection counts, etc).
     """
+    logger.info("compare_incidents: incident_a=%s incident_b=%s", incident_a, incident_b)
     inc_a = await session.get(Incident, incident_a)
     inc_b = await session.get(Incident, incident_b)
 
     if not inc_a or not inc_b:
         missing = incident_a if not inc_a else incident_b
+        logger.warning("compare_incidents: incident not found: %s", missing)
         return {"error": f"Incident {missing} not found"}
 
     async def get_trace(inc: Incident) -> list[dict[str, Any]]:

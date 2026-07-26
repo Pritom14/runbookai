@@ -8,6 +8,7 @@ GET /incidents/{incident_id}/postmortem
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime
 from typing import Any, Optional
 
@@ -18,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from runbookai.database import get_session
 from runbookai.models import AgentAction, Incident
 
+logger = logging.getLogger("runbookai.api.postmortem")
 router = APIRouter(prefix="/incidents", tags=["postmortem"])
 
 
@@ -27,8 +29,10 @@ async def get_postmortem(
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     """Return an auto-generated blameless postmortem as markdown."""
+    logger.info("get_postmortem: incident_id=%s", incident_id)
     incident = await session.get(Incident, incident_id)
     if incident is None:
+        logger.warning("get_postmortem: incident not found: %s", incident_id)
         raise HTTPException(status_code=404, detail="Incident not found")
 
     result = await session.execute(

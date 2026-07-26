@@ -1,9 +1,12 @@
 """RunbookAI — FastAPI application entry point."""
 
+import logging
 import pathlib
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+
+logger = logging.getLogger("runbookai.main")
 
 from runbookai.api.agents import router as agents_router
 from runbookai.api.analysis import router as analysis_router
@@ -47,8 +50,16 @@ app.mount("/static", StaticFiles(directory=_static), name="static")
 
 @app.on_event("startup")
 async def startup_event() -> None:
+    logger.info("RunbookAI startup: initializing database")
     await init_db()
+    logger.info("RunbookAI startup: loading runbooks from disk")
     await load_runbooks_from_disk()
+    logger.info("RunbookAI startup complete")
+
+
+@app.on_event("shutdown")
+async def shutdown_event() -> None:
+    logger.info("RunbookAI shutting down")
 
 
 @app.get("/health")
