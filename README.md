@@ -6,6 +6,38 @@ Autonomous incident response agent. Gets paged → reads the runbook → acts �
 
 No more 3am pages for problems your runbook already solves.
 
+## Business Use Case
+
+### The problem
+
+Most production incidents on a given team are not novel. A service OOMs, a disk fills up, a DB connection pool leaks, a fan fails on a physical host — the runbook for each is already written down. What's expensive is the execution: someone gets paged, wakes up, VPNs in, SSHes to a box, runs the same handful of diagnostic commands, applies the same fix, and — if it worked — writes a postmortem the next day reconstructing what they just did from memory and Slack scrollback. That cycle is toil: it drives on-call burnout and attrition, it caps MTTR at "however fast a human can wake up and orient," and it's inconsistent because no two engineers run a runbook identically under pressure.
+
+### Who it's for
+
+SRE, DevOps, and platform teams that operate their own servers, Kubernetes workloads, databases, or on-prem hardware and already maintain runbooks (in a wiki, in PagerDuty, or just in a senior engineer's head), but still execute them by hand. It fits best where the incident classes are recurring and well-understood — OOM crashes, disk pressure, DB connection leaks, hardware thermal events — since RunbookAI automates *running* the runbook, not diagnosing incidents nobody has seen before.
+
+### How it's different from what teams use today
+
+- **PagerDuty / Opsgenie** route and alert; they don't touch the box or run the fix.
+- **incident.io / Rootly** coordinate humans and help write postmortems; they don't execute remediation either.
+- **A runbook in a wiki** is only as good as whether the on-call engineer reads it correctly at 3am.
+
+RunbookAI's premise is that the runbook itself should run, not just be read.
+
+### Value delivered
+
+- **Lower MTTR** — diagnosis and remediation happen in seconds instead of the 10-20 minutes it takes a human to wake up, connect, and orient.
+- **Less on-call toil** — low-risk diagnostics (`check_logs`, `check_disk`, `query_metrics`, …) run with no human involved at all; only genuinely risky actions (restart, delete, scale) interrupt someone, and only for a one-tap approval, not manual execution.
+- **Consistent execution** — the same runbook runs the same way every time, removing the variance between a fresh engineer and a five-year veteran.
+- **Institutional memory, not just automation** — regression detection means that if the same service fails again within 6 hours of a prior fix, the agent is told "you already tried that" and digs for root cause instead of blindly repeating a fix that didn't stick — encoding a lesson a tired human might otherwise forget.
+- **Free postmortems** — a postmortem draft (timeline, actions taken, regression analysis, follow-ups) is generated automatically from the AgentTrace, eliminating the ~2 hours typically spent reconstructing an incident after the fact.
+- **Auditability and trust** — every tool call and decision is logged and replayable, so a team can adopt autonomy incrementally via Suggest Mode before trusting the agent to act alone.
+
+### Business model
+
+- **Shipped today: self-hosted, open source (Apache 2.0).** Runs entirely on the operator's own infrastructure, including the LLM (local via Ollama by default), so no incident data has to leave the customer's network and there's no SaaS fee. This is what the current MVP submission demonstrates — see below.
+- **In progress: managed cloud service.** The architecture (`docs/CLOUD_ARCHITECTURE.md`) has customers run a lightweight agent inside their own VPC that connects outbound to a RunbookAI-hosted control plane over SSE, so the vendor never gets direct SSH access to customer infrastructure — only the customer's own agent does. The intended monetization is tiered, usage-based pricing (by incidents and tool calls per month — see `docs/PRICING_MODELS_TODO.md`), with integrations like Slack/PagerDuty and analytics gated to paid tiers. Pricing itself is explicitly deferred pending customer interviews and market validation — the database/API foundation exists, but billing is not yet implemented or live.
+
 ## HYKR MVP Review
 
 This submission demonstrates RunbookAI through a local Docker chaos demo: the API receives an alert, matches a runbook, runs diagnostics/remediation against a sandbox target, and shows the full AgentTrace replay.
