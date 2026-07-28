@@ -13,9 +13,14 @@ from runbookai.database import Base, get_session
 from runbookai.main import app
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 async def test_db():
-    """Create in-memory test database."""
+    """Create an in-memory test database and override the app's session dependency.
+
+    autouse=True: no test in this module requests this fixture by name, so a
+    plain (non-autouse) fixture never runs, leaving the app to fall through to
+    its real, uninitialised DB engine and fail with "no such table: incidents".
+    """
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -28,6 +33,7 @@ async def test_db():
 
     app.dependency_overrides[get_session] = override_get_session
     yield engine
+    app.dependency_overrides.pop(get_session, None)
     await engine.dispose()
 
 
