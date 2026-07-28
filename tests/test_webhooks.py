@@ -25,7 +25,7 @@ async def _override_get_session():
 
 
 @pytest.fixture(autouse=True)
-async def setup_db_and_override(monkeypatch):
+async def setup_db_and_override():
     """Create tables, apply the in-memory DB override, and clean up after each test."""
     async with _test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -34,12 +34,6 @@ async def setup_db_and_override(monkeypatch):
     from runbookai.main import app
 
     app.dependency_overrides[get_session] = _override_get_session
-    # Background tasks (e.g. run_hardware_agent_for_incident) open sessions via
-    # webhooks.AsyncSessionLocal directly instead of the get_session dependency,
-    # so they bypass the override above and hit the real on-disk DB, which has
-    # no tables in tests. Patch that reference too so background work lands in
-    # the same in-memory DB the request handler used.
-    monkeypatch.setattr("runbookai.api.webhooks.AsyncSessionLocal", _TestSessionLocal)
     yield
     app.dependency_overrides.clear()
 
