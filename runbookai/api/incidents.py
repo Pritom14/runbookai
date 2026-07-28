@@ -35,6 +35,7 @@ async def list_incidents(
     if x_api_key:
         customer = await get_customer_from_api_key(x_api_key, session)
         if not customer:
+            logger.warning("list_incidents: rejected request with invalid API key")
             raise HTTPException(status_code=401, detail="Invalid API key")
         customer_id = customer.id
 
@@ -55,6 +56,11 @@ async def list_incidents(
 
     result = await session.execute(query.limit(limit).offset(offset))
     incidents = result.scalars().all()
+
+    logger.info(
+        "list_incidents: returned %d incidents (customer_id=%s, limit=%d, offset=%d)",
+        len(incidents), customer_id, limit, offset,
+    )
 
     return {
         "incidents": [
@@ -85,17 +91,28 @@ async def get_incident(
     """
     incident = await session.get(Incident, incident_id)
     if incident is None:
+        logger.warning("get_incident: incident %s not found", incident_id)
         raise HTTPException(status_code=404, detail="Incident not found")
 
     # Check customer isolation
     if x_api_key:
         customer = await get_customer_from_api_key(x_api_key, session)
         if not customer or incident.customer_id != customer.id:
+            logger.warning(
+                "get_incident: access denied for incident %s (api-key customer mismatch)",
+                incident_id,
+            )
             raise HTTPException(status_code=403, detail="Access denied")
     else:
         # Non-API-key access only to non-cloud incidents
         if incident.customer_id is not None:
+            logger.warning(
+                "get_incident: access denied for cloud incident %s without API key",
+                incident_id,
+            )
             raise HTTPException(status_code=403, detail="Access denied")
+
+    logger.info("get_incident: served incident %s", incident_id)
 
     return {
         "id": incident.id,
@@ -128,16 +145,25 @@ async def get_incident_replay(
     """
     incident = await session.get(Incident, incident_id)
     if incident is None:
+        logger.warning("get_incident_replay: incident %s not found", incident_id)
         raise HTTPException(status_code=404, detail="Incident not found")
 
     # Check customer isolation
     if x_api_key:
         customer = await get_customer_from_api_key(x_api_key, session)
         if not customer or incident.customer_id != customer.id:
+            logger.warning(
+                "get_incident_replay: access denied for incident %s (api-key customer mismatch)",
+                incident_id,
+            )
             raise HTTPException(status_code=403, detail="Access denied")
     else:
         # Non-API-key access only to non-cloud incidents
         if incident.customer_id is not None:
+            logger.warning(
+                "get_incident_replay: access denied for cloud incident %s without API key",
+                incident_id,
+            )
             raise HTTPException(status_code=403, detail="Access denied")
 
     result = await session.execute(
@@ -146,6 +172,11 @@ async def get_incident_replay(
         .order_by(AgentAction.created_at)
     )
     actions = result.scalars().all()
+
+    logger.info(
+        "get_incident_replay: built timeline of %d actions for incident %s",
+        len(actions), incident_id,
+    )
 
     base_time = actions[0].created_at if actions else incident.created_at
 
