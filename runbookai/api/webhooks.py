@@ -171,7 +171,10 @@ async def run_hardware_agent_for_incident(incident_id: str, delay_seconds: float
             logger.warning("incident=%s hardware run skipped; incident not found", incident_id)
             return
 
-        await remediate_hardware_incident(session, incident)
+        try:
+            await remediate_hardware_incident(session, incident)
+        except Exception:
+            logger.exception("incident=%s hardware background remediation raised", incident_id)
 
 
 @router.post("/pagerduty")
