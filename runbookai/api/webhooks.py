@@ -165,16 +165,18 @@ async def run_hardware_agent_for_incident(incident_id: str, delay_seconds: float
     if delay_seconds > 0:
         await asyncio.sleep(delay_seconds)
 
-    async with AsyncSessionLocal() as session:
-        incident = await session.get(Incident, incident_id)
-        if not incident:
-            logger.warning("incident=%s hardware run skipped; incident not found", incident_id)
-            return
+    try:
+        async with AsyncSessionLocal() as session:
+            incident = await session.get(Incident, incident_id)
+            if not incident:
+                logger.warning(
+                    "incident=%s hardware run skipped; incident not found", incident_id
+                )
+                return
 
-        try:
             await remediate_hardware_incident(session, incident)
-        except Exception:
-            logger.exception("incident=%s hardware background remediation raised", incident_id)
+    except Exception:
+        logger.exception("incident=%s hardware background run raised", incident_id)
 
 
 @router.post("/pagerduty")
