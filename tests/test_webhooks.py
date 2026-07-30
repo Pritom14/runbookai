@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
 
 from runbookai.integrations.pagerduty import parse_pagerduty_payload
 from runbookai.models import ApprovalRequest, ApprovalStatus, Base, Incident, IncidentStatus
@@ -15,7 +16,9 @@ from runbookai.models import ApprovalRequest, ApprovalStatus, Base, Incident, In
 # ---------------------------------------------------------------------------
 
 _TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
-_test_engine = create_async_engine(_TEST_DB_URL, connect_args={"check_same_thread": False})
+_test_engine = create_async_engine(
+    _TEST_DB_URL, connect_args={"check_same_thread": False}, poolclass=StaticPool
+)
 _TestSessionLocal = async_sessionmaker(_test_engine, expire_on_commit=False)
 
 
