@@ -152,7 +152,9 @@ async def test_generic_webhook_creates_incident_row():
     assert incident is not None
     assert incident.alert_name == "Disk space low on db-01"
     assert incident.source == "generic"
-    assert incident.status == IncidentStatus.PENDING
+    # The background agent run (awaited inline by the test transport) starts
+    # immediately and flips the incident to in_progress before this check.
+    assert incident.status == IncidentStatus.IN_PROGRESS
 
 
 @pytest.mark.asyncio
