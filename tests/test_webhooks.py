@@ -29,15 +29,25 @@ async def _override_get_session():
 
 @pytest.fixture(autouse=True)
 async def setup_db_and_override():
-    """Create tables, apply the in-memory DB override, and clean up after each test."""
+    """Create tables, apply the in-memory DB override, and clean up after each test.
+
+    Webhook background tasks open sessions via ``AsyncSessionLocal`` directly
+    rather than the ``get_session`` dependency, so that name is patched too —
+    otherwise they'd fall through to the real on-disk database, which has no
+    tables in a fresh checkout.
+    """
     async with _test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
     from runbookai.database import get_session
     from runbookai.main import app
+    import runbookai.api.webhooks as webhooks_module
 
     app.dependency_overrides[get_session] = _override_get_session
+    original_session_local = webhooks_module.AsyncSessionLocal
+    webhooks_module.AsyncSessionLocal = _TestSessionLocal
     yield
+    webhooks_module.AsyncSessionLocal = original_session_local
     app.dependency_overrides.clear()
 
 
