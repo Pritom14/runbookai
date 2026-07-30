@@ -39,9 +39,9 @@ async def setup_db_and_override():
     async with _test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
+    import runbookai.api.webhooks as webhooks_module
     from runbookai.database import get_session
     from runbookai.main import app
-    import runbookai.api.webhooks as webhooks_module
 
     app.dependency_overrides[get_session] = _override_get_session
     original_session_local = webhooks_module.AsyncSessionLocal
