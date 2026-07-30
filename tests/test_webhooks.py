@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
 
 from runbookai.integrations.pagerduty import parse_pagerduty_payload
 from runbookai.models import ApprovalRequest, ApprovalStatus, Base, Incident, IncidentStatus
@@ -15,7 +16,9 @@ from runbookai.models import ApprovalRequest, ApprovalStatus, Base, Incident, In
 # ---------------------------------------------------------------------------
 
 _TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
-_test_engine = create_async_engine(_TEST_DB_URL, connect_args={"check_same_thread": False})
+_test_engine = create_async_engine(
+    _TEST_DB_URL, connect_args={"check_same_thread": False}, poolclass=StaticPool
+)
 _TestSessionLocal = async_sessionmaker(_test_engine, expire_on_commit=False)
 
 
@@ -26,15 +29,25 @@ async def _override_get_session():
 
 @pytest.fixture(autouse=True)
 async def setup_db_and_override():
-    """Create tables, apply the in-memory DB override, and clean up after each test."""
+    """Create tables, apply the in-memory DB override, and clean up after each test.
+
+    Webhook background tasks open sessions via ``AsyncSessionLocal`` directly
+    rather than the ``get_session`` dependency, so that name is patched too —
+    otherwise they'd fall through to the real on-disk database, which has no
+    tables in a fresh checkout.
+    """
     async with _test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
+    import runbookai.api.webhooks as webhooks_module
     from runbookai.database import get_session
     from runbookai.main import app
 
     app.dependency_overrides[get_session] = _override_get_session
+    original_session_local = webhooks_module.AsyncSessionLocal
+    webhooks_module.AsyncSessionLocal = _TestSessionLocal
     yield
+    webhooks_module.AsyncSessionLocal = original_session_local
     app.dependency_overrides.clear()
 
 
@@ -139,7 +152,9 @@ async def test_generic_webhook_creates_incident_row():
     assert incident is not None
     assert incident.alert_name == "Disk space low on db-01"
     assert incident.source == "generic"
-    assert incident.status == IncidentStatus.PENDING
+    # The background agent run (awaited inline by the test transport) starts
+    # immediately and flips the incident to in_progress before this check.
+    assert incident.status == IncidentStatus.IN_PROGRESS
 
 
 @pytest.mark.asyncio

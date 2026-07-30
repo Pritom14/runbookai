@@ -8,15 +8,22 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from runbookai.database import Base, get_session
 from runbookai.main import app
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 async def test_db():
-    """Create in-memory test database."""
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    """Create in-memory test database and route all DB access to it.
+
+    Some request handlers (e.g. webhook background tasks) open sessions via
+    ``AsyncSessionLocal`` directly instead of the ``get_session`` dependency,
+    so that name has to be patched too or they fall through to the real
+    on-disk database, which has no tables in a fresh checkout.
+    """
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", poolclass=StaticPool)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
@@ -26,8 +33,14 @@ async def test_db():
         async with session_local() as session:
             yield session
 
+    import runbookai.api.webhooks as webhooks_module
+
     app.dependency_overrides[get_session] = override_get_session
+    original_session_local = webhooks_module.AsyncSessionLocal
+    webhooks_module.AsyncSessionLocal = session_local
     yield engine
+    webhooks_module.AsyncSessionLocal = original_session_local
+    app.dependency_overrides.clear()
     await engine.dispose()
 
 
